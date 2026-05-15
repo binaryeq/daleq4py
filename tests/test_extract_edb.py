@@ -34,9 +34,18 @@ def test_extract_edb_rows_have_four_columns(edb_base_dir):
 def test_extract_edb_captures_key_value_metadata(edb_base_dir):
     edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
     rows = _read_rows(edb_path)
-    # WHEEL is a key-value metadata file present in every wheel
+    # WHEEL is a key-value metadata file present in every wheel.
+    # packaging.metadata.parse_email lowercases unparsed field names.
     wheel_keys = {key for file, path, key, value in rows if file == "WHEEL"}
-    assert "Wheel-Version" in wheel_keys
+    assert "wheel-version" in wheel_keys
+
+
+def test_extract_edb_normalises_metadata_field_names(edb_base_dir):
+    edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    rows = _read_rows(edb_path)
+    # parse_email canonicalises recognised METADATA fields to snake_case.
+    metadata_keys = {key for file, path, key, value in rows if file == "METADATA"}
+    assert {"metadata_version", "name", "version"} <= metadata_keys
 
 
 def test_extract_edb_captures_unstructured_files_as_value(edb_base_dir):

@@ -5,7 +5,7 @@ description = "CLI tool to establish the equivalence of alternatively built pyth
 authors = [{ name = "Jens Dietrich", email = "jens.dietrich@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["packaging>=24"]
 
 [project.scripts]
 daleq4py = "daleq4py.cli:main"

@@ -19,8 +19,9 @@ import re
 import sys
 import time
 import zipfile
-from email.parser import Parser
 from pathlib import Path
+
+from packaging.metadata import parse_email
 
 from daleq4py.wheel import WheelValidationError, validate_wheel
 
@@ -72,22 +73,41 @@ def _looks_like_headers(text: str) -> bool:
 
 
 def _rows_for_member(file_name: str, dir_path: str, text: str) -> list[Row]:
-    """Turn one ``*.dist-info`` file into ``(file, path, key, value)`` rows."""
-    if _looks_like_headers(text):
-        message = Parser().parsestr(text)
-        rows: list[Row] = [
-            (file_name, dir_path, key, value) for key, value in message.items()
-        ]
-        body = message.get_payload()
-        if isinstance(body, str) and body.strip():
-            # e.g. the long description trailing the METADATA headers
-            rows.append((file_name, dir_path, "", body.strip()))
-        return rows
+    """Turn one ``*.dist-info`` file into ``(file, path, key, value)`` rows.
 
-    # No key-value structure (LICENSE, AUTHORS, RECORD, ...): keep raw content.
-    if text.strip():
-        return [(file_name, dir_path, "", text.strip())]
-    return []
+    RFC 822 files (``METADATA``, ``WHEEL``) are parsed with
+    :func:`packaging.metadata.parse_email`, which normalises field names,
+    splits multi-value fields and folds long-description bodies into the
+    ``description`` field. Unstructured files (``RECORD``, ``LICENSE``,
+    ``top_level.txt``, ...) keep their raw content as a single value row with
+    an empty key.
+    """
+    if not _looks_like_headers(text):
+        # parse_email would otherwise misclassify these as a description body.
+        if text.strip():
+            return [(file_name, dir_path, "", text.strip())]
+        return []
+
+    raw, unparsed = parse_email(text)
+    rows: list[Row] = []
+    # raw: recognised core-metadata fields. Values are str, list[str] or
+    # (for project_urls) dict[str, str].
+    for key, value in raw.items():
+        if isinstance(value, list):
+            for item in value:
+                rows.append((file_name, dir_path, key, str(item)))
+        elif isinstance(value, dict):
+            for sub_key, sub_value in value.items():
+                rows.append(
+                    (file_name, dir_path, f"{key}.{sub_key}", str(sub_value))
+                )
+        else:
+            rows.append((file_name, dir_path, key, str(value)))
+    # unparsed: any remaining fields (e.g. everything in WHEEL). Always list[str].
+    for key, values in unparsed.items():
+        for item in values:
+            rows.append((file_name, dir_path, key, item))
+    return rows
 
 
 def extract_edb(
