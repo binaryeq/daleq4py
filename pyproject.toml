@@ -1,0 +1,25 @@
+[project]
+name = "daleq4py"
+version = "0.1.0"
+description = "CLI tool to establish the equivalence of alternatively built python packages."
+authors = [{ name = "Jens Dietrich", email = "jens.dietrich@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+daleq4py = "daleq4py.cli:main"
+
+[tool.poetry]
+packages = [{ include = "daleq4py", from = "src" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
