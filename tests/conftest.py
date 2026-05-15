@@ -1,50 +1,40 @@
 """Shared pytest fixtures.
 
-Test wheels live under ``tests/data/<package>/<version>/<builder>/`` where
-``builder`` is one of ``pypi``, ``macaron`` or ``ossr`` — each an alternatively
-built wheel for the same package, version pair, intended to be compared.
+Concrete paths to the sample wheels live in ``tests/sample_data.py``.
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
 
-DATA_DIR = Path(__file__).parent / "data"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-BUILDERS = ("pypi", "macaron", "ossr")
-
-
-def _sample_packages() -> list[tuple[str, str]]:
-    """Discover ``(package, version)`` pairs available under ``tests/data``."""
-    pairs = []
-    for package_dir in sorted(DATA_DIR.iterdir()):
-        if not package_dir.is_dir():
-            continue
-        for version_dir in sorted(package_dir.iterdir()):
-            if version_dir.is_dir():
-                pairs.append((package_dir.name, version_dir.name))
-    return pairs
+# EDB files produced by tests go here, under the project folder, so they are
+# easy to inspect and never pollute the system temp directory.
+EDB_TEST_DIR = ".souffle-test"
 
 
-@pytest.fixture
-def data_dir() -> Path:
-    """Root directory holding the sample wheels."""
-    return DATA_DIR
+@pytest.fixture(scope="session", autouse=True)
+def clear_edb_test_dir() -> None:
+    """Wipe ``.souffle-test`` once before the whole test run (like @BeforeAll).
 
-
-@pytest.fixture(params=_sample_packages(), ids=lambda p: f"{p[0]}-{p[1]}")
-def sample_wheels(request) -> dict[str, Path]:
-    """Map each builder name to its wheel for one sample ``(package, version)``.
-
-    Parametrised: a test using this fixture runs once per sample package.
+    ``autouse`` + ``scope="session"`` means this runs exactly once, before any
+    test, whether or not a test asks for it. Output from the latest run is
+    left behind afterwards so it can be inspected.
     """
-    package, version = request.param
-    wheels = {}
-    for builder in BUILDERS:
-        builder_dir = DATA_DIR / package / version / builder
-        matches = list(builder_dir.glob("*.whl"))
-        assert len(matches) == 1, f"expected one wheel in {builder_dir}"
-        wheels[builder] = matches[0]
-    return wheels
+    resolved = PROJECT_ROOT / EDB_TEST_DIR
+    if resolved.exists():
+        shutil.rmtree(resolved)
+
+
+@pytest.fixture(scope="session")
+def edb_base_dir() -> str:
+    """Base directory for EDB files written by tests.
+
+    Returns the relative form: ``extract_edb`` resolves it against the project
+    root. The directory itself is cleared by :func:`clear_edb_test_dir`.
+    """
+    return EDB_TEST_DIR

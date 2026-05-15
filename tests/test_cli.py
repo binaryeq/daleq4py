@@ -3,6 +3,7 @@
 import zipfile
 
 import pytest
+from sample_data import COLORLOG_MACARON, COLORLOG_PYPI
 
 from daleq4py.cli import main
 
@@ -17,9 +18,9 @@ def _make_wheel(directory, name=VALID_WHEEL_NAME):
 
 
 
-def test_cli_compares_real_sample_wheels(sample_wheels):
+def test_cli_compares_real_sample_wheels():
     """The CLI accepts alternatively built wheels for the same package."""
-    assert main([str(sample_wheels["pypi"]), str(sample_wheels["macaron"])]) == 0
+    assert main([str(COLORLOG_PYPI), str(COLORLOG_MACARON)]) == 0
 
 
 def test_cli_requires_two_arguments(tmp_path):

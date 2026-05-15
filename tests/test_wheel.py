@@ -3,6 +3,7 @@
 import zipfile
 
 import pytest
+from sample_data import ALL_WHEELS
 
 from daleq4py.wheel import WheelValidationError, validate_wheel
 
@@ -52,7 +53,7 @@ def test_rejects_non_zip(tmp_path):
         validate_wheel(str(fake))
 
 
-def test_accepts_real_sample_wheels(sample_wheels):
+@pytest.mark.parametrize("wheel", ALL_WHEELS, ids=lambda w: w.name)
+def test_accepts_real_sample_wheels(wheel):
     """Every alternatively built sample wheel passes validation."""
-    for wheel in sample_wheels.values():
-        assert validate_wheel(str(wheel)) == wheel.resolve()
+    assert validate_wheel(str(wheel)) == wheel.resolve()
