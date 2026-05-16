@@ -1,0 +1,36 @@
+// core.souffle — base schema for daleq4py.
+//
+// The schema is split into two Soufflé components:
+//
+//   * edb -- the extensional database of facts loaded from the TSV files
+//            produced by extract_edb.py (one TSV per wheel, identified by
+//            ``id``).
+//   * idb -- the intensional database of predicates derived from the EDB.
+//
+// A single pass-through rule lifts every edb.metadata fact into idb.metadata
+// so that downstream rules can reason exclusively over the IDB.
+//
+// The two file paths are template placeholders that the caller substitutes
+// before souffle is invoked:
+//
+//   <edb-facts>   path to the input TSV (e.g. ``metadata-edb.tsv``)
+//   <idb-facts>   path to the output TSV
+
+.comp Edb {
+    .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
+}
+
+.comp Idb {
+    .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
+    .decl remove-metadata(id: symbol, file: symbol, path: symbol, key: symbol)
+}
+
+.init edb = Edb
+.init idb = Idb
+
+.input edb.metadata(IO=file, filename="<edb-facts>", delimiter="\t")
+.output idb.metadata(IO=file, filename="<idb-facts>", delimiter="\t")
+
+// lift every extensional fact into the intensional database.
+// this can be prevented by guard
+idb.metadata(cat("R_METHOD","[",id,"]"), file, path, key, value) :- edb.metadata(id, file, path, key, value),!remove-metadata(_,file,path,key).
