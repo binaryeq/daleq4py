@@ -3,8 +3,8 @@
 A wheel keeps its metadata in a top-level ``*.dist-info`` directory. This
 module flattens every file in that directory into a Soufflé-friendly TSV table
 with the columns ``file``, ``path``, ``key`` and ``value`` and writes it to
-``<base_dir>/<wheel-name>/<session>/edb/metadata-edb.tsv``. A companion file
-``package-edb.tsv`` in the same directory records the package descriptor
+``<base_dir>/<wheel-name>/<session>/edb/metadata.tsv``. A companion file
+``package.tsv`` in the same directory records the package descriptor
 (``name`` and ``distinfo`` keys).
 
 Files with an RFC 822 style ``Key: value`` header block (``METADATA``,
@@ -30,8 +30,8 @@ from daleq4py.wheel import WheelValidationError, validate_wheel
 logger = logging.getLogger("daleq4py")
 
 DIST_INFO_SUFFIX = ".dist-info"
-EDB_FILENAME = "metadata-edb.tsv"
-PACKAGE_EDB_FILENAME = "package-edb.tsv"
+EDB_FILENAME = "metadata.tsv"
+PACKAGE_EDB_FILENAME = "package.tsv"
 
 # Project root: <root>/src/daleq4py/extract_edb.py -> parents[2]. A relative
 # base directory is resolved against this so EDB files land inside the project
@@ -128,17 +128,17 @@ def extract_edb(
     Two files are written to
     ``<base_dir>/<wheel-name>/<session>/edb/``:
 
-    * ``metadata-edb.tsv`` -- ``(file, path, key, value)`` rows extracted from
+    * ``metadata.tsv`` -- ``(file, path, key, value)`` rows extracted from
       every file in the wheel's ``*.dist-info`` directory.
-    * ``package-edb.tsv`` -- ``(key, value)`` descriptor with two rows:
+    * ``package.tsv`` -- ``(key, value)`` descriptor with two rows:
       ``name`` (the package's ``<name>-<version>`` token, taken from the
       dist-info directory) and ``distinfo`` (the dist-info directory name).
 
     ``<wheel-name>`` is the wheel filename without its ``.whl`` suffix and
     ``<session>`` is a freshly generated id. A relative ``base_dir`` is
     resolved against the project root, not the current working directory. The
-    returned :class:`~pathlib.Path` is the ``metadata-edb.tsv`` file; the
-    package descriptor sits alongside it in the same directory.
+    returned :class:`~pathlib.Path` is the ``metadata.tsv`` file; the package
+    descriptor sits alongside it in the same directory.
     """
     wheel_path = validate_wheel(str(wheel))
     wheel_name = wheel_path.stem

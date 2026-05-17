@@ -21,7 +21,7 @@ def test_extract_edb_writes_tsv_at_expected_path(edb_base_dir):
     edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
 
     assert edb_path.exists()
-    assert edb_path.name == "metadata-edb.tsv"
+    assert edb_path.name == "metadata.tsv"
     # <project>/<base_dir>/<wheel-name>/<session>/edb/metadata-edb.tsv
     assert edb_path.parent.name == "edb"
     assert edb_path.parents[2].name == COLORLOG_PYPI.stem

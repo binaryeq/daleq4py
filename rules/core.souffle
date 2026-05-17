@@ -14,7 +14,8 @@
 // before souffle is invoked:
 //
 //   <edb-metadata-facts> , <edb-package-facts>  path to the input TSV
-//   <idb-metadata-facts> , <idb-package-facts>  path to the output TSV
+//   <idb-package-facts> , <idb-package-facts>  path to the input TSV
+
 
 .comp Edb {
     .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
@@ -33,7 +34,7 @@
 .input edb.metadata(IO=file, filename="<edb-metadata-facts>", delimiter="\t")
 .input edb.package(IO=file, filename="<edb-package-facts>", delimiter="\t")
 .output idb.metadata(IO=file, filename="<idb-metadata-facts>", delimiter="\t")
-.output idb.metadata(IO=file, filename="<idb-package-facts>", delimiter="\t")
+.output idb.package(IO=file, filename="<idb-package-facts>", delimiter="\t")
 
 
 // lift every extensional fact into the intensional database.
