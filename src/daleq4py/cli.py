@@ -1,3 +1,5 @@
+# Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
+
 """Command line interface for daleq4py.
 
 Uses argparse. The CLI layer stays thin: it validates the two wheel arguments

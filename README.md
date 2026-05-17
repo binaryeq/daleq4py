@@ -55,6 +55,25 @@ Extracts a metadata EDB (extensional database) from a single wheel into
 The path of `metadata.tsv` is printed on success; `package.tsv` lives in the
 same directory.
 
+### inference
+
+Runs Soufflé on the EDB produced by `extract-edb`. The script copies
+`rules/core.souffle` to `<session>/mergedEDBAndRules.souffle`, substitutes the
+four `<*-facts>` placeholders with absolute paths to the EDB (input) and IDB
+(output) TSVs, creates the sibling `<session>/idb/` directory, then invokes
+`souffle` to produce `idb/metadata.tsv` and `idb/package.tsv`.
+
+```sh
+poetry run inference EDB_DIR
+```
+
+| Argument / option | Description |
+| --- | --- |
+| `EDB_DIR` | path to the `edb/` directory produced by `extract-edb` |
+| `-v`, `--verbose` | enable verbose (debug) logging |
+
+The `souffle` binary must be on `PATH`.
+
 ```sh
 poetry run extract-edb WHEEL
 ```

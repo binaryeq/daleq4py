@@ -1,3 +1,5 @@
+# Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
+
 """Tests for wheel argument validation."""
 
 import zipfile

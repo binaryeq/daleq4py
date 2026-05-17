@@ -1,11 +1,17 @@
+# Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
+
 """Extract a metadata EDB (extensional database) from a Python wheel.
 
 A wheel keeps its metadata in a top-level ``*.dist-info`` directory. This
 module flattens every file in that directory into a Soufflé-friendly TSV table
-with the columns ``file``, ``path``, ``key`` and ``value`` and writes it to
-``<base_dir>/<wheel-name>/<session>/edb/metadata.tsv``. A companion file
-``package.tsv`` in the same directory records the package descriptor
-(``name`` and ``distinfo`` keys).
+with the columns ``id``, ``file``, ``path``, ``key`` and ``value`` and writes
+it to ``<base_dir>/<wheel-name>/<session>/edb/metadata.tsv``. A companion
+file ``package.tsv`` in the same directory records the package descriptor
+with columns ``id``, ``key``, ``value`` (two rows: ``name`` and ``distinfo``).
+
+The ``id`` column carries a unique fact id (``F1``, ``F2``, ...) assigned
+in extraction order. The counter runs across both files so every fact in
+one EDB is uniquely identified.
 
 Files with an RFC 822 style ``Key: value`` header block (``METADATA``,
 ``WHEEL``) contribute one row per pair. Files without that structure
@@ -21,6 +27,7 @@ import re
 import sys
 import time
 import zipfile
+from itertools import count
 from pathlib import Path
 
 from packaging.metadata import parse_email
@@ -128,11 +135,14 @@ def extract_edb(
     Two files are written to
     ``<base_dir>/<wheel-name>/<session>/edb/``:
 
-    * ``metadata.tsv`` -- ``(file, path, key, value)`` rows extracted from
-      every file in the wheel's ``*.dist-info`` directory.
-    * ``package.tsv`` -- ``(key, value)`` descriptor with two rows:
+    * ``metadata.tsv`` -- ``(id, file, path, key, value)`` rows extracted
+      from every file in the wheel's ``*.dist-info`` directory.
+    * ``package.tsv`` -- ``(id, key, value)`` descriptor with two rows:
       ``name`` (the package's ``<name>-<version>`` token, taken from the
       dist-info directory) and ``distinfo`` (the dist-info directory name).
+
+    The ``id`` column is a unique counter (``F1``, ``F2``, ...) shared
+    across both files, so every fact in one EDB has a distinct identifier.
 
     ``<wheel-name>`` is the wheel filename without its ``.whl`` suffix and
     ``<session>`` is a freshly generated id. A relative ``base_dir`` is
@@ -174,11 +184,20 @@ def extract_edb(
     edb_dir = base / wheel_name / session / "edb"
     edb_dir.mkdir(parents=True, exist_ok=True)
 
+    # Unique fact ids "F1", "F2", ... shared across both files.
+    fact_ids = (f"F{n}" for n in count(1))
+
     metadata_path = edb_dir / EDB_FILENAME
-    _write_tsv(metadata_path, rows)
+    _write_tsv(metadata_path, [(next(fact_ids), *row) for row in rows])
 
     package_path = edb_dir / PACKAGE_EDB_FILENAME
-    _write_tsv(package_path, [("name", package_name), ("distinfo", dist_info_dir)])
+    _write_tsv(
+        package_path,
+        [
+            (next(fact_ids), "name", package_name),
+            (next(fact_ids), "distinfo", dist_info_dir),
+        ],
+    )
 
     logger.info("extracted %d metadata rows to %s", len(rows), metadata_path)
     logger.info("wrote package descriptor to %s", package_path)

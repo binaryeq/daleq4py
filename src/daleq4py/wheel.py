@@ -1,3 +1,5 @@
+# Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
+
 """Validation of Python wheel arguments.
 
 Kept separate from the CLI layer so the rules can be unit tested directly.

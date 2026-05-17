@@ -1,3 +1,5 @@
+# Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
+
 """Smoke tests for the CLI argument handling."""
 
 import zipfile

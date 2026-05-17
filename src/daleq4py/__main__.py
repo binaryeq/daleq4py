@@ -1,3 +1,5 @@
+# Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
+
 """Entry point so the package can be run as `python -m daleq4py`."""
 
 from daleq4py.cli import main

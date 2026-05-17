@@ -10,6 +10,7 @@ dependencies = ["packaging>=24"]
 [project.scripts]
 daleq4py = "daleq4py.cli:main"
 extract-edb = "daleq4py.extract_edb:main"
+inference = "daleq4py.inference:main"
 
 [tool.poetry]
 packages = [{ include = "daleq4py", from = "src" }]

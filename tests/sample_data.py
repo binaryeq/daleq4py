@@ -1,3 +1,5 @@
+# Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
+
 """Concrete paths to the sample wheels under ``tests/data``.
 
 Each package is shipped as three alternatively built wheels — ``pypi``,

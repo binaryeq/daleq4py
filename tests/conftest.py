@@ -1,3 +1,5 @@
+# Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
+
 """Shared pytest fixtures.
 
 Concrete paths to the sample wheels live in ``tests/sample_data.py``.
