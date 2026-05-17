@@ -43,11 +43,17 @@ poetry run daleq4py WHEEL_A WHEEL_B
 
 ### extract-edb
 
-Extracts a metadata EDB (extensional database) from a single wheel. Every file
-in the wheel's `*.dist-info` directory is flattened into a TSV table with the
-columns `file`, `path`, `key`, `value` and written to
-`<base-dir>/<wheel-name>/<session>/edb/metadata-edb.tsv`. The path of the
-generated file is printed on success.
+Extracts a metadata EDB (extensional database) from a single wheel into
+`<base-dir>/<wheel-name>/<session>/edb/`:
+
+- `metadata-edb.tsv` — every file in the wheel's `*.dist-info` directory
+  flattened into rows with columns `file`, `path`, `key`, `value`.
+- `package-edb.tsv` — a two-row package descriptor with `name` (the
+  `<package>-<version>` token, e.g. `colorlog-6.7.0`) and `distinfo` (the
+  matching `*.dist-info` directory name).
+
+The path of `metadata-edb.tsv` is printed on success; `package-edb.tsv` lives
+in the same directory.
 
 ```sh
 poetry run extract-edb WHEEL

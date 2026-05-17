@@ -1,9 +1,13 @@
 """Tests for metadata EDB extraction from wheels."""
 
 import pytest
-from sample_data import COLORLOG_PYPI
+from sample_data import ARROW_PYPI, AUTOPEP8_PYPI, COLORLOG_PYPI
 
-from daleq4py.extract_edb import PROJECT_ROOT, extract_edb
+from daleq4py.extract_edb import (
+    PACKAGE_EDB_FILENAME,
+    PROJECT_ROOT,
+    extract_edb,
+)
 from daleq4py.wheel import WheelValidationError
 
 
@@ -73,3 +77,43 @@ def test_extract_edb_sessions_sort_newest_first(edb_base_dir):
 def test_extract_edb_rejects_invalid_wheel(edb_base_dir, tmp_path):
     with pytest.raises(WheelValidationError):
         extract_edb(tmp_path / "missing.whl", base_dir=edb_base_dir)
+
+
+# --- package-edb.tsv ---
+
+
+def test_extract_edb_writes_package_edb_alongside_metadata(edb_base_dir):
+    edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    package_path = edb_path.parent / PACKAGE_EDB_FILENAME
+
+    assert package_path.exists()
+    assert package_path.parent == edb_path.parent  # same edb/ directory
+
+
+def test_extract_edb_package_edb_has_name_and_distinfo_rows(edb_base_dir):
+    edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    package_path = edb_path.parent / PACKAGE_EDB_FILENAME
+
+    rows = _read_rows(package_path)
+    assert rows == [
+        ("name", "colorlog-6.7.0"),
+        ("distinfo", "colorlog-6.7.0.dist-info"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "wheel,expected_name",
+    [
+        (COLORLOG_PYPI, "colorlog-6.7.0"),
+        (ARROW_PYPI, "arrow-1.2.1"),
+        (AUTOPEP8_PYPI, "autopep8-2.1.2"),
+    ],
+    ids=lambda v: v if isinstance(v, str) else v.name,
+)
+def test_extract_edb_package_name_matches_dist_info(
+    wheel, expected_name, edb_base_dir
+):
+    edb_path = extract_edb(wheel, base_dir=edb_base_dir)
+    rows = dict(_read_rows(edb_path.parent / PACKAGE_EDB_FILENAME))
+    assert rows["name"] == expected_name
+    assert rows["distinfo"] == f"{expected_name}.dist-info"

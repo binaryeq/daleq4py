@@ -3,7 +3,9 @@
 A wheel keeps its metadata in a top-level ``*.dist-info`` directory. This
 module flattens every file in that directory into a Soufflé-friendly TSV table
 with the columns ``file``, ``path``, ``key`` and ``value`` and writes it to
-``<base_dir>/<wheel-name>/<session>/edb/metadata-edb.tsv``.
+``<base_dir>/<wheel-name>/<session>/edb/metadata-edb.tsv``. A companion file
+``package-edb.tsv`` in the same directory records the package descriptor
+(``name`` and ``distinfo`` keys).
 
 Files with an RFC 822 style ``Key: value`` header block (``METADATA``,
 ``WHEEL``) contribute one row per pair. Files without that structure
@@ -29,6 +31,7 @@ logger = logging.getLogger("daleq4py")
 
 DIST_INFO_SUFFIX = ".dist-info"
 EDB_FILENAME = "metadata-edb.tsv"
+PACKAGE_EDB_FILENAME = "package-edb.tsv"
 
 # Project root: <root>/src/daleq4py/extract_edb.py -> parents[2]. A relative
 # base directory is resolved against this so EDB files land inside the project
@@ -110,21 +113,38 @@ def _rows_for_member(file_name: str, dir_path: str, text: str) -> list[Row]:
     return rows
 
 
+def _write_tsv(path: Path, rows) -> None:
+    """Write ``rows`` (any iterable of string tuples) as escaped TSV."""
+    with path.open("w", encoding="utf-8", newline="\n") as out:
+        for row in rows:
+            out.write("\t".join(_escape(field) for field in row) + "\n")
+
+
 def extract_edb(
     wheel: str | Path, base_dir: str | Path = DEFAULT_BASE_DIR
 ) -> Path:
-    """Extract the metadata EDB from ``wheel`` and return the written TSV path.
+    """Extract the metadata EDB from ``wheel`` and return the metadata TSV path.
 
-    The table is written to
-    ``<base_dir>/<wheel-name>/<session>/edb/metadata-edb.tsv``, where
+    Two files are written to
+    ``<base_dir>/<wheel-name>/<session>/edb/``:
+
+    * ``metadata-edb.tsv`` -- ``(file, path, key, value)`` rows extracted from
+      every file in the wheel's ``*.dist-info`` directory.
+    * ``package-edb.tsv`` -- ``(key, value)`` descriptor with two rows:
+      ``name`` (the package's ``<name>-<version>`` token, taken from the
+      dist-info directory) and ``distinfo`` (the dist-info directory name).
+
     ``<wheel-name>`` is the wheel filename without its ``.whl`` suffix and
     ``<session>`` is a freshly generated id. A relative ``base_dir`` is
-    resolved against the project root, not the current working directory.
+    resolved against the project root, not the current working directory. The
+    returned :class:`~pathlib.Path` is the ``metadata-edb.tsv`` file; the
+    package descriptor sits alongside it in the same directory.
     """
     wheel_path = validate_wheel(str(wheel))
     wheel_name = wheel_path.stem
 
     rows: list[Row] = []
+    dist_info_dirs: set[str] = set()
     with zipfile.ZipFile(wheel_path) as archive:
         for info in archive.infolist():
             if info.is_dir():
@@ -132,10 +152,19 @@ def extract_edb(
             parts = info.filename.split("/")
             if not parts[0].endswith(DIST_INFO_SUFFIX):
                 continue  # only the .dist-info directory holds metadata
+            dist_info_dirs.add(parts[0])
             file_name = parts[-1]
             dir_path = "/".join(parts[:-1])
             text = archive.read(info.filename).decode("utf-8", errors="replace")
             rows.extend(_rows_for_member(file_name, dir_path, text))
+
+    if len(dist_info_dirs) != 1:
+        raise WheelValidationError(
+            f"wheel does not contain exactly one .dist-info directory: "
+            f"{sorted(dist_info_dirs) or 'none'}"
+        )
+    [dist_info_dir] = dist_info_dirs
+    package_name = dist_info_dir[: -len(DIST_INFO_SUFFIX)]
 
     base = Path(base_dir)
     if not base.is_absolute():
@@ -144,14 +173,16 @@ def extract_edb(
     session = _new_session()
     edb_dir = base / wheel_name / session / "edb"
     edb_dir.mkdir(parents=True, exist_ok=True)
-    edb_path = edb_dir / EDB_FILENAME
 
-    with edb_path.open("w", encoding="utf-8", newline="\n") as out:
-        for row in rows:
-            out.write("\t".join(_escape(field) for field in row) + "\n")
+    metadata_path = edb_dir / EDB_FILENAME
+    _write_tsv(metadata_path, rows)
 
-    logger.info("extracted %d metadata rows to %s", len(rows), edb_path)
-    return edb_path
+    package_path = edb_dir / PACKAGE_EDB_FILENAME
+    _write_tsv(package_path, [("name", package_name), ("distinfo", dist_info_dir)])
+
+    logger.info("extracted %d metadata rows to %s", len(rows), metadata_path)
+    logger.info("wrote package descriptor to %s", package_path)
+    return metadata_path
 
 
 def _build_parser() -> argparse.ArgumentParser:

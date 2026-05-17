@@ -10,27 +10,32 @@
 // A single pass-through rule lifts every edb.metadata fact into idb.metadata
 // so that downstream rules can reason exclusively over the IDB.
 //
-// The two file paths are template placeholders that the caller substitutes
+// The file paths `<*>` are template placeholders that the caller substitutes
 // before souffle is invoked:
 //
-//   <edb-facts>   path to the input TSV (e.g. ``metadata-edb.tsv``)
-//   <idb-facts>   path to the output TSV
+//   <edb-metadata-facts> , <edb-package-facts>  path to the input TSV
+//   <idb-metadata-facts> , <idb-package-facts>  path to the output TSV
 
 .comp Edb {
     .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
+    .decl package(id: symbol, key: symbol, value: symbol)
 }
 
 .comp Idb {
     .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
+    // guard to override default lifting rule
     .decl remove-metadata(id: symbol, file: symbol, path: symbol, key: symbol)
 }
 
 .init edb = Edb
 .init idb = Idb
 
-.input edb.metadata(IO=file, filename="<edb-facts>", delimiter="\t")
-.output idb.metadata(IO=file, filename="<idb-facts>", delimiter="\t")
+.input edb.metadata(IO=file, filename="<edb-metadata-facts>", delimiter="\t")
+.input edb.package(IO=file, filename="<edb-package-facts>", delimiter="\t")
+.output idb.metadata(IO=file, filename="<idb-metadata-facts>", delimiter="\t")
+.output idb.metadata(IO=file, filename="<idb-package-facts>", delimiter="\t")
+
 
 // lift every extensional fact into the intensional database.
-// this can be prevented by guard
-idb.metadata(cat("R_METHOD","[",id,"]"), file, path, key, value) :- edb.metadata(id, file, path, key, value),!remove-metadata(_,file,path,key).
+idb.metadata(cat("R_METADATA","[",id,"]"), key, value) :- edb.metadata(id, file, path, key, value),!remove-metadata(_,file,path,key).
+idb.package(cat("R_PACKAGE","[",id,"]"), key, value) :- edb.metadata(id, file, path, key, value.
