@@ -74,6 +74,25 @@ poetry run inference EDB_DIR
 
 The `souffle` binary must be on `PATH`.
 
+### project-idb
+
+Renders a human-readable markdown summary of an IDB directory. For every
+`*.tsv` file in the input folder it emits a section whose header is the
+predicate name (the filename stem) and whose body is a markdown table; the
+column headers are inferred from the matching `.decl` declaration in any
+`rules/*.souffle` file. The summary is written to
+`<session>/normalisation-summary.md`.
+
+```sh
+poetry run project-idb IDB_DIR
+```
+
+| Argument / option | Description |
+| --- | --- |
+| `IDB_DIR` | path to the `idb/` directory produced by `inference` |
+| `--remove-derivation` | drop the leading `id` column from each table and write to `normalisation-summary-reduced.md` instead of `normalisation-summary.md` |
+| `-v`, `--verbose` | enable verbose (debug) logging |
+
 ```sh
 poetry run extract-edb WHEEL
 ```
