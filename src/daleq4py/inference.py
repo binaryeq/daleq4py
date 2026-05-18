@@ -2,17 +2,18 @@
 
 """Run Soufflé inference on a wheel's extracted EDB.
 
-Given the ``edb/`` directory produced by :mod:`daleq4py.extract_edb`, this
+Given the ``<session>/edb/`` directory produced by :mod:`daleq4py.extract_edb`, this
 module:
 
 1. copies ``rules/core.souffle`` to ``<session>/mergedEDBAndRules.souffle``;
 2. replaces the four ``<*-facts>`` placeholders in that copy with absolute
    paths to the EDB (input) and IDB (output) fact files;
 3. creates the sibling ``<session>/idb/`` directory;
-4. invokes the ``souffle`` binary on the merged file, which writes
-   ``metadata.tsv`` and ``package.tsv`` into the IDB directory.
+4. invokes the ``souffle`` binary on the merged file, which writes the inferred IDB
+   (as *.tsv file) into the IDB directory.
 
 The function returns the IDB directory path.
+
 """
 
 from __future__ import annotations
