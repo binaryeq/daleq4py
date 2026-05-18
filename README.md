@@ -93,6 +93,33 @@ poetry run project-idb IDB_DIR
 | `--remove-derivation` | drop the leading `id` column from each table and write to `normalisation-summary-reduced.md` instead of `normalisation-summary.md` |
 | `-v`, `--verbose` | enable verbose (debug) logging |
 
+### parse-provenance
+
+Parses a derived-fact provenance id (an encoded proof tree such as
+`R1[F1,R2[F2,F3]]`) and prints the resulting derivation tree. The grammar
+lives in `src/daleq4py/proof.lark` and is the Lark equivalent of the
+antlr4 `Proof.g4` grammar in the daleq Java project.
+
+```sh
+poetry run parse-provenance 'R1[F1,R2[F2,F3,F4]]'
+```
+
+Output:
+
+```
+R1
+├── F1
+└── R2
+    ├── F2
+    ├── F3
+    └── F4
+```
+
+| Argument / option | Description |
+| --- | --- |
+| `EXPRESSION` | the derivation id to parse |
+| `-v`, `--verbose` | enable verbose (debug) logging |
+
 ```sh
 poetry run extract-edb WHEEL
 ```

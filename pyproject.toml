@@ -5,13 +5,14 @@ description = "CLI tool to establish the equivalence of alternatively built pyth
 authors = [{ name = "Jens Dietrich", email = "jens.dietrich@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["packaging>=24"]
+dependencies = ["packaging>=24", "lark>=1.1"]
 
 [project.scripts]
 daleq4py = "daleq4py.cli:main"
 extract-edb = "daleq4py.extract_edb:main"
 inference = "daleq4py.inference:main"
 project-idb = "daleq4py.project_idb:main"
+parse-provenance = "daleq4py.parse_provenance:main"
 
 [tool.poetry]
 packages = [{ include = "daleq4py", from = "src" }]

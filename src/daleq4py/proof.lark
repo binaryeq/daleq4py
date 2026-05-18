@@ -1,0 +1,15 @@
+// Lark grammar describing the structure of derived-fact ids in daleq4py.
+//
+// Equivalent of the antlr4 Proof.g4 grammar from the daleq Java project:
+//   https://github.com/binaryeq/daleq/blob/main/src/main/antlr4/io/github/bineq/daleq/souffle/provenance/Proof.g4
+//
+// A derived id encodes a proof tree: each node is the id of a fact or rule,
+// optionally followed by a comma-separated list of child nodes in square
+// brackets. Whitespace between tokens is ignored.
+
+?start: node
+node: ID children?
+children: "[" node ("," node)* "]"
+ID: /[A-Za-z0-9_]+/
+
+%ignore /[ \t\r\n]+/
