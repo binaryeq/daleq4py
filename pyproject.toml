@@ -16,6 +16,7 @@ parse-provenance = "daleq4py.parse_provenance:main"
 normalise-pysrc = "daleq4py.normalise_pysrc:main"
 compare-wheels = "daleq4py.compare_wheels:main"
 run-experiments = "daleq4py.run_experiments:main"
+wheel-diff = "daleq4py.wheel_diff:main"
 
 [tool.poetry]
 packages = [{ include = "daleq4py", from = "src" }]

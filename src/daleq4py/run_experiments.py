@@ -29,6 +29,7 @@ from pathlib import Path
 
 from daleq4py.compare_wheels import compare_wheels
 from daleq4py.extract_edb import PROJECT_ROOT
+from daleq4py.wheel_diff import build_report as build_wheel_diff_report
 
 logger = logging.getLogger("daleq4py.run_experiments")
 
@@ -98,6 +99,7 @@ def _render_pair_report(
     equal: bool | None,
     info: dict | None,
     error: str | None,
+    diff_md_path: Path | None,
 ) -> str:
     """Build the markdown text for one comparison pair."""
     lines: list[str] = [
@@ -107,10 +109,15 @@ def _render_pair_report(
         f"- Version: `{version}`",
         f"- Build A (`{build_a}`): [`{_rel(wheel_a, md_path)}`]({_rel(wheel_a, md_path)})",
         f"- Build B (`{build_b}`): [`{_rel(wheel_b, md_path)}`]({_rel(wheel_b, md_path)})",
+    ]
+    if diff_md_path is not None:
+        diff_rel = _rel(diff_md_path, md_path)
+        lines.append(f"- File-level wheel diff: [`{diff_rel}`]({diff_rel})")
+    lines.extend([
         "",
         "## Result",
         "",
-    ]
+    ])
 
     if error is not None:
         lines.extend([
@@ -236,6 +243,7 @@ def run_experiments(sample_dir: Path, results_dir: Path) -> dict:
             total += 1
             pair_label = f"{build_a}-vs-{build_b}"
             md_path = results_dir / package / version / f"{pair_label}.md"
+            diff_md_path = md_path.with_name(f"{pair_label}-diff.md")
             pair_base = artefacts_root / package / version / pair_label
             wheel_a, wheel_b = builds[build_a], builds[build_b]
 
@@ -259,10 +267,27 @@ def run_experiments(sample_dir: Path, results_dir: Path) -> dict:
                 error = f"{type(exc).__name__}: {exc}"
 
             md_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # File-level wheel diff is independent of the souffle pipeline;
+            # generate it even if compare_wheels failed.
+            diff_written: Path | None
+            try:
+                diff_md_path.write_text(
+                    build_wheel_diff_report(wheel_a, wheel_b),
+                    encoding="utf-8",
+                )
+                diff_written = diff_md_path
+            except Exception:
+                logger.error(
+                    "wheel-diff failed for %s %s %s",
+                    package, version, pair_label, exc_info=True,
+                )
+                diff_written = None
+
             md_path.write_text(
                 _render_pair_report(
                     md_path, package, version, build_a, build_b,
-                    wheel_a, wheel_b, equal, info, error,
+                    wheel_a, wheel_b, equal, info, error, diff_written,
                 ),
                 encoding="utf-8",
             )

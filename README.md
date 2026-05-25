@@ -201,6 +201,26 @@ plus the per-group booleans `metadata_equal`, `py_files_equal`,
 `other_files_equal`, and the lists of differing / one-sided member names for
 the `.py` and other-file groups.
 
+### wheel-diff
+
+Produces a markdown diff report between two wheels. The report lists, with
+SHA-256 digests, the files present in only one wheel, the files that are
+byte-identical in both, and the files that are present in both but differ —
+each with a unified textual diff (for files that decode as text) or a
+`*Binary files differ.*` note.
+
+```sh
+poetry run wheel-diff WHEEL_1 WHEEL_2 [-o FILE]
+```
+
+| Argument / option | Description |
+| --- | --- |
+| `WHEEL_1`, `WHEEL_2` | paths to the two wheels (`.whl`) to diff |
+| `-o`, `--output FILE` | write the report to `FILE` instead of stdout |
+| `-v`, `--verbose` | enable verbose (debug) logging |
+
+Adapted from `pyeqpkg/diff-script/wheel-diff.py`.
+
 ### run-experiments
 
 Sweeps `sample-data/` and runs `compare-wheels` for every pair of builds of
@@ -209,8 +229,11 @@ the same `(package, version)`. The expected sample layout is
 per pair is written to:
 
 ```
-sample-data-results/<package>/<version>/<build_a>-vs-<build_b>.md
+sample-data-results/<package>/<version>/<build_a>-vs-<build_b>.md       # comparison report
+sample-data-results/<package>/<version>/<build_a>-vs-<build_b>-diff.md  # wheel-diff report
 ```
+
+The comparison report links to the wheel-diff report in its header.
 
 A top-level `sample-data-results/summary.md` is also written: it carries the
 counts of equal / different / errored pairs and a details table (package,
