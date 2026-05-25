@@ -159,4 +159,84 @@ poetry run normalise-pysrc PATH [PATH ...] (-o DIR | -i)
 
 Exactly one of `--output` or `--in-place` is required.
 
+### compare-wheels
+
+Compares two wheels by partitioning their contents into three groups and
+applying a different equality test to each:
+
+1. **`*.dist-info` metadata** — runs `extract-edb`, `inference` and
+   `project-idb` (twice, with and without `--remove-derivation`) on both
+   wheels, then compares the reduced markdown summaries character by
+   character.
+2. **`*.py` source files** — normalises each shared `.py` member with the
+   `normalise-pysrc` AST round-trip and compares the results character by
+   character.
+3. **All other files** — byte-by-byte comparison.
+
+Members present in only one wheel count as a difference. The three per-group
+booleans are combined with `and` to produce the overall result. Exit code:
+`0` if the wheels are equal, `1` if they differ, `2` on error.
+
+```sh
+poetry run compare-wheels WHEEL_A WHEEL_B
+```
+
+| Argument / option | Description |
+| --- | --- |
+| `WHEEL_A`, `WHEEL_B` | paths to the two wheels (`.whl`) to compare |
+| `--base-dir DIR` | root directory for EDB / IDB / projection artefacts; a relative path is resolved against the project root (default: `.souffle`) |
+| `-v`, `--verbose` | enable verbose (debug) logging |
+
+The programmatic entry point
+`daleq4py.compare_wheels.compare_wheels(wheel_a, wheel_b)` returns a
+`(bool, dict)` pair. The dict contains, for each of the two wheels:
+
+- `wheels` — input wheel path
+- `edb_dirs` — extracted EDB directory
+- `idb_dirs` — inferred IDB directory
+- `summaries`, `summaries_reduced` — full and reduced markdown projections
+- `merged_rules` — path to `mergedEDBAndRules.souffle`
+
+plus the per-group booleans `metadata_equal`, `py_files_equal`,
+`other_files_equal`, and the lists of differing / one-sided member names for
+the `.py` and other-file groups.
+
+### run-experiments
+
+Sweeps `sample-data/` and runs `compare-wheels` for every pair of builds of
+the same `(package, version)`. The expected sample layout is
+`sample-data/<package>/<version>/<build>/<wheel>.whl`. One markdown report
+per pair is written to:
+
+```
+sample-data-results/<package>/<version>/<build_a>-vs-<build_b>.md
+```
+
+A top-level `sample-data-results/summary.md` is also written: it carries the
+counts of equal / different / errored pairs and a details table (package,
+build combination, overall / metadata / python source / other results) with
+each row linking to its per-pair report.
+
+Pipeline artefacts (EDB, IDB, projections, `mergedEDBAndRules.souffle`) for
+each pair land under `sample-data-results/.artefacts/<package>/<version>/<build_a>-vs-<build_b>/`,
+and the markdown reports link to them with relative paths. Each report lists:
+
+- the overall result and the per-group results (metadata / `.py` / other);
+- a table of artefact paths for both builds;
+- the names of any members that differ or appear in only one build.
+
+A pair that raises during comparison is recorded as `ERROR` in its report;
+the sweep continues with the next pair. Exit code: `0` if no pair errored,
+`1` otherwise.
+
+```sh
+poetry run run-experiments
+```
+
+| Argument / option | Description |
+| --- | --- |
+| `--sample-dir DIR` | sample-data root (default: `sample-data`) |
+| `--results-dir DIR` | output root (default: `sample-data-results`) |
+| `-v`, `--verbose` | enable verbose (debug) logging |
+
 Use `--help` with any command for the full list of options.
