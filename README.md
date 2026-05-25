@@ -132,4 +132,31 @@ poetry run extract-edb WHEEL
 
 The test suite writes its EDB files to `.souffle-test/` instead.
 
-Use `--help` with either command for the full list of options.
+### normalise-pysrc
+
+Normalises Python source files for binary-equivalence analysis by
+round-tripping them through the stdlib AST (`ast.parse` + `ast.unparse`).
+This:
+
+- removes `#` comments (the AST does not preserve them);
+- standardises layout to a canonical, deterministic form;
+- writes `\n` line endings unconditionally.
+
+Docstrings are kept (they are string-literal expressions, not comments).
+Files that fail to parse are reported and skipped; the exit status is
+non-zero if any file failed.
+
+```sh
+poetry run normalise-pysrc PATH [PATH ...] (-o DIR | -i)
+```
+
+| Argument / option | Description |
+| --- | --- |
+| `PATH` | one or more Python source files or directories (directories are recursed for `*.py`) |
+| `-o`, `--output DIR` | write normalised files under `DIR`, mirroring the input tree |
+| `-i`, `--in-place` | overwrite source files in place |
+| `-v`, `--verbose` | enable verbose (debug) logging |
+
+Exactly one of `--output` or `--in-place` is required.
+
+Use `--help` with any command for the full list of options.
