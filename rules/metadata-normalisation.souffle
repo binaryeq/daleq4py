@@ -1,0 +1,45 @@
+// Author: Jens Dietrich (https://github.com/jensdietrich/)
+
+// core.souffle — base schema for daleq4py.
+//
+// The schema is split into two Soufflé components:
+//
+//   * edb -- the extensional database of facts loaded from the TSV files
+//            produced by extract_edb.py (one TSV per wheel, identified by
+//            ``id``).
+//   * idb -- the intensional database of predicates derived from the EDB.
+//
+// A single pass-through rule lifts every edb.metadata fact into idb.metadata
+// so that downstream rules can reason exclusively over the IDB.
+//
+// The file paths `<*>` are template placeholders that the caller substitutes
+// before souffle is invoked:
+//
+//   <edb-metadata-facts> , <edb-package-facts>  input TSV paths
+//   <idb-metadata-facts> , <idb-package-facts>  output TSV paths
+
+
+.comp Edb {
+    .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
+    .decl package(id: symbol, key: symbol, value: symbol)
+}
+
+.comp Idb {
+    .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
+    .decl package(id: symbol, key: symbol, value: symbol)
+    // guard to override default lifting rule
+    .decl remove_metadata(id: symbol, file: symbol, path: symbol, key: symbol)
+}
+
+.init edb = Edb
+.init idb = Idb
+
+.input edb.metadata(IO=file, filename="<edb-metadata-facts>", delimiter="\t")
+.input edb.package(IO=file, filename="<edb-package-facts>", delimiter="\t")
+.output idb.metadata(IO=file, filename="<idb-metadata-facts>", delimiter="\t")
+.output idb.package(IO=file, filename="<idb-package-facts>", delimiter="\t")
+
+
+// lift every extensional fact into the intensional database.
+idb.metadata(cat("R_METADATA","[",id,"]"), file, path, key, value) :- edb.metadata(id, file, path, key, value), !idb.remove_metadata(_, file, path, key).
+idb.package(cat("R_PACKAGE","[",id,"]"), key, value) :- edb.package(id, key, value).

@@ -78,10 +78,30 @@ def test_extract_edb_normalises_metadata_field_names(edb_base_dir):
 def test_extract_edb_captures_unstructured_files_as_value(edb_base_dir):
     edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
     rows = _read_rows(edb_path)
-    # RECORD has no key-value structure: stored with an empty key.
+    # LICENSE has no key-value structure: stored with an empty key and the
+    # file's raw content as the value.
+    license_rows = [row for row in rows if row[1] == "LICENSE"]
+    assert license_rows
+    assert all(key == "" and value for id, file, path, key, value in license_rows)
+
+
+def test_extract_edb_parses_record_per_line(edb_base_dir):
+    edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    rows = _read_rows(edb_path)
     record_rows = [row for row in rows if row[1] == "RECORD"]
-    assert record_rows
-    assert all(key == "" and value for id, file, path, key, value in record_rows)
+
+    # RECORD contributes one row per packaged file (many rows, not one).
+    assert len(record_rows) > 1
+
+    for _id, _file, _path, key, value in record_rows:
+        # The key is the packaged file path; it must be non-empty and have
+        # no comma in it (the first comma separates key from value).
+        assert key
+        assert "," not in key
+        # The value is the rest of the line: either the sha256+size pair
+        # for normal entries, or empty for RECORD's own self-entry.
+        if value:
+            assert value.startswith("sha256=") or value.startswith(",")
 
 
 def test_extract_edb_path_uses_dist_info_directory(edb_base_dir):

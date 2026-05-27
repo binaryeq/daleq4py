@@ -14,9 +14,13 @@ in extraction order. The counter runs across both files so every fact in
 one EDB is uniquely identified.
 
 Files with an RFC 822 style ``Key: value`` header block (``METADATA``,
-``WHEEL``) contribute one row per pair. Files without that structure
-(``LICENSE``, ``AUTHORS``, ``RECORD``, ...) contribute a single row whose key
-is the empty string and whose value is the file's raw content.
+``WHEEL``) contribute one row per pair. ``RECORD`` is comma-separated and
+contributes one row per packaged file: the first comma-separated token
+(the packaged file path) becomes the key and the rest of the line (e.g.
+``sha256=<digest>,<size>``) becomes the value. Any other unstructured
+file (``LICENSE``, ``AUTHORS``, ``top_level.txt``, ...) contributes a
+single row whose key is the empty string and whose value is the file's
+raw content.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ logger = logging.getLogger("daleq4py")
 DIST_INFO_SUFFIX = ".dist-info"
 EDB_FILENAME = "metadata.tsv"
 PACKAGE_EDB_FILENAME = "package.tsv"
+RECORD_FILENAME = "RECORD"
 
 # Project root: <root>/src/daleq4py/extract_edb.py -> parents[2]. A relative
 # base directory is resolved against this so EDB files land inside the project
@@ -82,16 +87,35 @@ def _looks_like_headers(text: str) -> bool:
     return False
 
 
+def _rows_for_record(file_name: str, dir_path: str, text: str) -> list[Row]:
+    """Turn ``RECORD`` (comma-separated, one line per packaged file) into rows.
+
+    Each non-blank line becomes one row: the first comma-separated token (the
+    packaged file path) is the key and the remainder of the line (typically
+    ``sha256=<digest>,<size>``) is the value.
+    """
+    rows: list[Row] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        key, _, value = line.partition(",")
+        rows.append((file_name, dir_path, key, value))
+    return rows
+
+
 def _rows_for_member(file_name: str, dir_path: str, text: str) -> list[Row]:
     """Turn one ``*.dist-info`` file into ``(file, path, key, value)`` rows.
 
-    RFC 822 files (``METADATA``, ``WHEEL``) are parsed with
-    :func:`packaging.metadata.parse_email`, which normalises field names,
-    splits multi-value fields and folds long-description bodies into the
-    ``description`` field. Unstructured files (``RECORD``, ``LICENSE``,
-    ``top_level.txt``, ...) keep their raw content as a single value row with
+    ``RECORD`` is comma-separated and contributes one row per packaged file
+    (see :func:`_rows_for_record`). RFC 822 files (``METADATA``, ``WHEEL``)
+    are parsed with :func:`packaging.metadata.parse_email`, which normalises
+    field names, splits multi-value fields and folds long-description bodies
+    into the ``description`` field. Any other unstructured file (``LICENSE``,
+    ``top_level.txt``, ...) keeps its raw content as a single value row with
     an empty key.
     """
+    if file_name == RECORD_FILENAME:
+        return _rows_for_record(file_name, dir_path, text)
     if not _looks_like_headers(text):
         # parse_email would otherwise misclassify these as a description body.
         if text.strip():
