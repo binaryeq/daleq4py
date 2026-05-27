@@ -229,11 +229,15 @@ the same `(package, version)`. The expected sample layout is
 per pair is written to:
 
 ```
-sample-data-results/<package>/<version>/<build_a>-vs-<build_b>.md       # comparison report
-sample-data-results/<package>/<version>/<build_a>-vs-<build_b>-diff.md  # wheel-diff report
+sample-data-results/<package>/<version>/<build_a>-vs-<build_b>.md                    # comparison report
+sample-data-results/<package>/<version>/<build_a>-vs-<build_b>-diff.md               # wheel-diff report
+sample-data-results/<package>/<version>/<build_a>-vs-<build_b>-idb-diff.md           # unified diff of full IDB projections
+sample-data-results/<package>/<version>/<build_a>-vs-<build_b>-idb-reduced-diff.md   # unified diff of reduced IDB projections
 ```
 
-The comparison report links to the wheel-diff report in its header.
+The comparison report links to all three diff reports in its header. The two
+IDB-diff reports are only produced when the comparison pipeline ran
+successfully (they read the projection files it writes).
 
 A top-level `sample-data-results/summary.md` is also written: it carries the
 counts of equal / different / errored pairs and a details table (package,

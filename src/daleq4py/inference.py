@@ -5,9 +5,11 @@
 Given the ``<session>/edb/`` directory produced by :mod:`daleq4py.extract_edb`, this
 module:
 
-1. copies ``rules/core.souffle`` to ``<session>/mergedEDBAndRules.souffle``;
-2. replaces the four ``<*-facts>`` placeholders in that copy with absolute
-   paths to the EDB (input) and IDB (output) fact files;
+1. concatenates every ``rules/*.souffle`` file (in sorted order) into
+   ``<session>/mergedEDBAndRules.souffle``, prefixing each file's content with
+   a ``// from <path-relative-to-project-root>`` provenance comment;
+2. replaces the four ``<*-facts>`` placeholders in that merged file with
+   absolute paths to the EDB (input) and IDB (output) fact files;
 3. creates the sibling ``<session>/idb/`` directory;
 4. invokes the ``souffle`` binary on the merged file, which writes the inferred IDB
    (as *.tsv file) into the IDB directory.
@@ -33,11 +35,11 @@ from daleq4py.extract_edb import (
 
 logger = logging.getLogger("daleq4py")
 
-RULES_FILE = PROJECT_ROOT / "rules" / "core.souffle"
+RULES_DIR = PROJECT_ROOT / "rules"
 MERGED_FILENAME = "mergedEDBAndRules.souffle"
 SOUFFLE_EXECUTABLE = "souffle"
 
-# Placeholders inside ``rules/core.souffle`` that get substituted with
+# Placeholders inside the merged rules file that get substituted with
 # absolute paths before souffle is invoked.
 _EDB_METADATA_PLACEHOLDER = "<edb-metadata-facts>"
 _EDB_PACKAGE_PLACEHOLDER = "<edb-package-facts>"
@@ -71,8 +73,9 @@ def run_inference(edb_dir: str | Path) -> Path:
         if not required.exists():
             raise InferenceError(f"missing fact file: {required}")
 
-    if not RULES_FILE.exists():
-        raise InferenceError(f"missing rules file: {RULES_FILE}")
+    rule_files = sorted(RULES_DIR.glob("*.souffle"))
+    if not rule_files:
+        raise InferenceError(f"no .souffle files in: {RULES_DIR}")
 
     session_dir = edb_dir.parent
     idb_dir = session_dir / "idb"
@@ -87,16 +90,29 @@ def run_inference(edb_dir: str | Path) -> Path:
     def _rel(p: Path) -> str:
         return p.relative_to(session_dir).as_posix()
 
+    # Concatenate every rules file, prefixing each block with a provenance
+    # comment so the merged file points back to the source of each rule.
+    merged_chunks: list[str] = []
+    for rule_file in rule_files:
+        provenance = rule_file.relative_to(PROJECT_ROOT).as_posix()
+        body = rule_file.read_text(encoding="utf-8")
+        if not body.endswith("\n"):
+            body += "\n"
+        merged_chunks.append(f"// from {provenance}\n{body}\n")
+
     merged_path = session_dir / MERGED_FILENAME
     rule_text = (
-        RULES_FILE.read_text(encoding="utf-8")
+        "".join(merged_chunks)
         .replace(_EDB_METADATA_PLACEHOLDER, _rel(metadata_edb))
         .replace(_EDB_PACKAGE_PLACEHOLDER, _rel(package_edb))
         .replace(_IDB_METADATA_PLACEHOLDER, _rel(metadata_idb))
         .replace(_IDB_PACKAGE_PLACEHOLDER, _rel(package_idb))
     )
     merged_path.write_text(rule_text, encoding="utf-8")
-    logger.info("wrote merged souffle program to %s", merged_path)
+    logger.info(
+        "wrote merged souffle program (%d rule file(s)) to %s",
+        len(rule_files), merged_path,
+    )
 
     if shutil.which(SOUFFLE_EXECUTABLE) is None:
         raise InferenceError(

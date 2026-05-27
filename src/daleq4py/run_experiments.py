@@ -21,6 +21,7 @@ markdown can link to them with stable relative paths.
 from __future__ import annotations
 
 import argparse
+import difflib
 import logging
 import os
 import sys
@@ -100,6 +101,8 @@ def _render_pair_report(
     info: dict | None,
     error: str | None,
     diff_md_path: Path | None,
+    idb_diff_md_path: Path | None,
+    idb_reduced_diff_md_path: Path | None,
 ) -> str:
     """Build the markdown text for one comparison pair."""
     lines: list[str] = [
@@ -113,6 +116,12 @@ def _render_pair_report(
     if diff_md_path is not None:
         diff_rel = _rel(diff_md_path, md_path)
         lines.append(f"- File-level wheel diff: [`{diff_rel}`]({diff_rel})")
+    if idb_diff_md_path is not None:
+        rel = _rel(idb_diff_md_path, md_path)
+        lines.append(f"- IDB projection diff (full): [`{rel}`]({rel})")
+    if idb_reduced_diff_md_path is not None:
+        rel = _rel(idb_reduced_diff_md_path, md_path)
+        lines.append(f"- IDB projection diff (reduced): [`{rel}`]({rel})")
     lines.extend([
         "",
         "## Result",
@@ -163,6 +172,45 @@ def _render_pair_report(
                 lines.append(f"- `{name}`")
             lines.append("")
 
+    return "\n".join(lines) + "\n"
+
+
+def _render_text_diff_report(
+    report_path: Path,
+    title: str,
+    label_a: str,
+    label_b: str,
+    path_a: Path,
+    path_b: Path,
+) -> str:
+    """Markdown unified-diff of two text files, with a header table linking them."""
+    text_a = path_a.read_text(encoding="utf-8").splitlines(keepends=True)
+    text_b = path_b.read_text(encoding="utf-8").splitlines(keepends=True)
+    diff = list(
+        difflib.unified_diff(
+            text_a, text_b,
+            fromfile=path_a.as_posix(),
+            tofile=path_b.as_posix(),
+        )
+    )
+    rel_a = _rel(path_a, report_path)
+    rel_b = _rel(path_b, report_path)
+    lines = [
+        f"# {title}",
+        "",
+        "| | File |",
+        "|---|---|",
+        f"| **{label_a}** | [`{rel_a}`]({rel_a}) |",
+        f"| **{label_b}** | [`{rel_b}`]({rel_b}) |",
+        "",
+    ]
+    if not diff:
+        lines.append("*Files are identical.*")
+    else:
+        lines.append("```diff")
+        lines.extend(line.rstrip("\n") for line in diff)
+        lines.append("```")
+    lines.append("")
     return "\n".join(lines) + "\n"
 
 
@@ -244,6 +292,10 @@ def run_experiments(sample_dir: Path, results_dir: Path) -> dict:
             pair_label = f"{build_a}-vs-{build_b}"
             md_path = results_dir / package / version / f"{pair_label}.md"
             diff_md_path = md_path.with_name(f"{pair_label}-diff.md")
+            idb_diff_md_path = md_path.with_name(f"{pair_label}-idb-diff.md")
+            idb_reduced_diff_md_path = md_path.with_name(
+                f"{pair_label}-idb-reduced-diff.md"
+            )
             pair_base = artefacts_root / package / version / pair_label
             wheel_a, wheel_b = builds[build_a], builds[build_b]
 
@@ -284,10 +336,51 @@ def run_experiments(sample_dir: Path, results_dir: Path) -> dict:
                 )
                 diff_written = None
 
+            # IDB projection diffs only make sense when compare_wheels ran.
+            label_a = f"Build A ({build_a})"
+            label_b = f"Build B ({build_b})"
+            idb_diff_written: Path | None = None
+            idb_reduced_diff_written: Path | None = None
+            if info is not None:
+                try:
+                    idb_diff_md_path.write_text(
+                        _render_text_diff_report(
+                            idb_diff_md_path,
+                            "IDB projection diff (full)",
+                            label_a, label_b,
+                            info["summaries"]["a"], info["summaries"]["b"],
+                        ),
+                        encoding="utf-8",
+                    )
+                    idb_diff_written = idb_diff_md_path
+                except Exception:
+                    logger.error(
+                        "idb full diff failed for %s %s %s",
+                        package, version, pair_label, exc_info=True,
+                    )
+                try:
+                    idb_reduced_diff_md_path.write_text(
+                        _render_text_diff_report(
+                            idb_reduced_diff_md_path,
+                            "IDB projection diff (reduced)",
+                            label_a, label_b,
+                            info["summaries_reduced"]["a"],
+                            info["summaries_reduced"]["b"],
+                        ),
+                        encoding="utf-8",
+                    )
+                    idb_reduced_diff_written = idb_reduced_diff_md_path
+                except Exception:
+                    logger.error(
+                        "idb reduced diff failed for %s %s %s",
+                        package, version, pair_label, exc_info=True,
+                    )
+
             md_path.write_text(
                 _render_pair_report(
                     md_path, package, version, build_a, build_b,
-                    wheel_a, wheel_b, equal, info, error, diff_written,
+                    wheel_a, wheel_b, equal, info, error,
+                    diff_written, idb_diff_written, idb_reduced_diff_written,
                 ),
                 encoding="utf-8",
             )

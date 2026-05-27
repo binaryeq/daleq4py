@@ -1,45 +1,22 @@
 // Author: Jens Dietrich (https://github.com/jensdietrich/)
 
-// core.souffle — base schema for daleq4py.
-//
-// The schema is split into two Soufflé components:
-//
-//   * edb -- the extensional database of facts loaded from the TSV files
-//            produced by extract_edb.py (one TSV per wheel, identified by
-//            ``id``).
-//   * idb -- the intensional database of predicates derived from the EDB.
-//
-// A single pass-through rule lifts every edb.metadata fact into idb.metadata
-// so that downstream rules can reason exclusively over the IDB.
-//
-// The file paths `<*>` are template placeholders that the caller substitutes
-// before souffle is invoked:
-//
-//   <edb-metadata-facts> , <edb-package-facts>  input TSV paths
-//   <idb-metadata-facts> , <idb-package-facts>  output TSV paths
+// rule to normalise build tools in metadata
 
 
-.comp Edb {
-    .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
-    .decl package(id: symbol, key: symbol, value: symbol)
+.comp MetadataNormalisation {
+    .decl is_whitelisted_buildtool(id: symbol, name: symbol)
 }
 
-.comp Idb {
-    .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
-    .decl package(id: symbol, key: symbol, value: symbol)
-    // guard to override default lifting rule
-    .decl remove_metadata(id: symbol, file: symbol, path: symbol, key: symbol)
-}
+.init metanorm = MetadataNormalisation
 
-.init edb = Edb
-.init idb = Idb
+// list of whitelisted build tools
+// TODO: can refine regex uses to express (semver like) versions, but easy to overfit
+metanorm.is_whitelisted_buildtool("R_WHITELISTED_BUILD_TOOL_setuptools",name) :- match("setuptools.*", name);
+metanorm.is_whitelisted_buildtool("R_WHITELISTED_BUILD_TOOL_bdist_wheel",name) :- match("bdist_wheel.*", name);
 
-.input edb.metadata(IO=file, filename="<edb-metadata-facts>", delimiter="\t")
-.input edb.package(IO=file, filename="<edb-package-facts>", delimiter="\t")
-.output idb.metadata(IO=file, filename="<idb-metadata-facts>", delimiter="\t")
-.output idb.package(IO=file, filename="<idb-package-facts>", delimiter="\t")
+// override generator metadata for whitelisted generators
+idb.remove_metadata(cat("R_REMOVE_BUILDER","[",id1,",",id2,",",id3,"]"), "WHEEL", distinfo, "generator") :-
+    edb.package(id1,"distinfo",distinfo),
+    edb.metadata(id2,"WHEEL", distinfo,"generator",buildtool),
+    metanorm.is_whitelisted_buildtool(id3,buildtool);
 
-
-// lift every extensional fact into the intensional database.
-idb.metadata(cat("R_METADATA","[",id,"]"), file, path, key, value) :- edb.metadata(id, file, path, key, value), !idb.remove_metadata(_, file, path, key).
-idb.package(cat("R_PACKAGE","[",id,"]"), key, value) :- edb.package(id, key, value).
