@@ -6,6 +6,7 @@
 .comp MetadataNormalisation {
     .decl generator(id: symbol, name: symbol)
     .decl whitelisted_generator(id: symbol, name: symbol)
+    .decl wheel_path(id: symbol, name: symbol)
 }
 
 .init metanorm = MetadataNormalisation
@@ -16,6 +17,9 @@ metanorm.generator(cat("R_GENERATOR","[",id1,",",id2,"]"),generator) :- edb.pack
 metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_setuptools","[",id,"]"),generator) :- metanorm.generator(id,generator),match("setuptools.*", generator).
 metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_bdist_wheel","[",id,"]"),generator) :- metanorm.generator(id,generator),match("bdist_wheel.*", generator).
 
-// override generator metadata for whitelisted generators
-idb.remove_metadata(cat("R_REMOVE_BUILDER","[",id1,",",id2,",",id3,"]"), "WHEEL", distinfo, "generator") :- edb.package(id1,"distinfo",distinfo),edb.metadata(id2,"WHEEL", distinfo,"generator",generator),metanorm.whitelisted_generator(id3,generator).
+// wheel path is needed to remove the key from RECORD
+metanorm.wheel_path(cat("R_WHEEL_PATH","[",id,"]"), cat(distinfo,"/WHEEL")) :- edb.package(id,"distinfo",distinfo).
 
+// override generator metadata for whitelisted generators, then remove entry from record as hash is no longer valid
+idb.remove_metadata(cat("R_REMOVE_BUILDER","[",id1,",",id2,",",id3,"]"), "WHEEL", distinfo, "generator") :- edb.package(id1,"distinfo",distinfo),edb.metadata(id2,"WHEEL", distinfo,"generator",generator),metanorm.whitelisted_generator(id3,generator).
+idb.remove_metadata(cat("R_REMOVE_WHEELPATH_FROM_RECORD","[",id1,",",id2,"]"), "RECORD", distinfo, wheelpath) :- metanorm.wheel_path(id1,wheelpath),idb.remove_metadata(id2, "WHEEL", distinfo, "generator").
