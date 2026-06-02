@@ -11,7 +11,7 @@
 
 .init metanorm = MetadataNormalisation
 
-metanorm.generator(cat("R_GENERATOR","[",id1,",",id2,"]"),generator) :- edb.package(id1,"distinfo",distinfo),edb.metadata(id2,"WHEEL", distinfo,"generator",generator).
+metanorm.generator(cat("R_GENERATOR","[",id1,",",id2,"]"),generator) :- edb.package(id1,"distinfo",distinfo),edb.content(id2,"WHEEL", distinfo,"generator",generator).
 // list of whitelisted build tools
 // TODO: can refine regex uses to express (semver like) versions, but easy to overfit
 metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_setuptools","[",id,"]"),generator) :- metanorm.generator(id,generator),match("setuptools.*", generator).
@@ -21,5 +21,5 @@ metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_bdist_wheel","[",id,
 metanorm.wheel_path(cat("R_WHEEL_PATH","[",id,"]"), cat(distinfo,"/WHEEL")) :- edb.package(id,"distinfo",distinfo).
 
 // override generator metadata for whitelisted generators, then remove entry from record as hash is no longer valid
-idb.remove_metadata(cat("R_REMOVE_BUILDER","[",id1,",",id2,",",id3,"]"), "WHEEL", distinfo, "generator") :- edb.package(id1,"distinfo",distinfo),edb.metadata(id2,"WHEEL", distinfo,"generator",generator),metanorm.whitelisted_generator(id3,generator).
-idb.remove_metadata(cat("R_REMOVE_WHEELPATH_FROM_RECORD","[",id1,",",id2,"]"), "RECORD", distinfo, wheelpath) :- metanorm.wheel_path(id1,wheelpath),idb.remove_metadata(id2, "WHEEL", distinfo, "generator").
+idb.remove_content(cat("R_REMOVE_BUILDER","[",id1,",",id2,",",id3,"]"), "WHEEL", distinfo, "generator") :- edb.package(id1,"distinfo",distinfo),edb.content(id2,"WHEEL", distinfo,"generator",generator),metanorm.whitelisted_generator(id3,generator).
+idb.remove_content(cat("R_REMOVE_WHEELPATH_FROM_RECORD","[",id1,",",id2,"]"), "RECORD", distinfo, wheelpath) :- metanorm.wheel_path(id1,wheelpath),idb.remove_content(id2, "WHEEL", distinfo, "generator").

@@ -43,25 +43,33 @@ poetry run daleq4py WHEEL_A WHEEL_B
 
 ### extract-edb
 
-Extracts a metadata EDB (extensional database) from a single wheel into
+Extracts a content EDB (extensional database) from a single wheel into
 `<base-dir>/<wheel-name>/<session>/edb/`:
 
-- `metadata.tsv` — every file in the wheel's `*.dist-info` directory
-  flattened into rows with columns `file`, `path`, `key`, `value`.
+- `content.tsv` — **every** member of the wheel flattened into rows with
+  columns `file`, `path`, `key`, `value`. Each member contributes:
+  - **Explicit keys** when the member is a recognised metadata file inside
+    `*.dist-info/`: RFC 822 `Key: value` pairs for `METADATA` / `WHEEL`,
+    and one `(packaged-file-path, sha256=…,size)` row per line of `RECORD`.
+  - **Synthetic keys** (every member): `@sha256`, `@norm/sha256` (text files
+    only — `.py` via AST round-trip, other text via LF normalisation),
+    `@more/size`, and — when `--src` is supplied — `@src-exists`,
+    `@src-exists-moved`, `@src/sha256`, `@src/norm/sha256`.
 - `package.tsv` — a two-row package descriptor with `name` (the
   `<package>-<version>` token, e.g. `colorlog-6.7.0`) and `distinfo` (the
   matching `*.dist-info` directory name).
 
-The path of `metadata.tsv` is printed on success; `package.tsv` lives in the
+The path of `content.tsv` is printed on success; `package.tsv` lives in the
 same directory.
 
 ### inference
 
-Runs Soufflé on the EDB produced by `extract-edb`. The script copies
-`rules/core.souffle` to `<session>/mergedEDBAndRules.souffle`, substitutes the
-four `<*-facts>` placeholders with absolute paths to the EDB (input) and IDB
-(output) TSVs, creates the sibling `<session>/idb/` directory, then invokes
-`souffle` to produce `idb/metadata.tsv` and `idb/package.tsv`.
+Runs Soufflé on the EDB produced by `extract-edb`. The script concatenates
+every `rules/*.souffle` file (each block prefixed with a `// from <path>`
+provenance comment) into `<session>/mergedEDBAndRules.souffle`, substitutes
+the four `<*-facts>` placeholders with absolute paths to the EDB (input) and
+IDB (output) TSVs, creates the sibling `<session>/idb/` directory, then
+invokes `souffle` to produce `idb/content.tsv` and `idb/package.tsv`.
 
 ```sh
 poetry run inference EDB_DIR
@@ -121,12 +129,13 @@ R1
 | `-v`, `--verbose` | enable verbose (debug) logging |
 
 ```sh
-poetry run extract-edb WHEEL
+poetry run extract-edb WHEEL [--src ZIP]
 ```
 
 | Argument / option | Description |
 | --- | --- |
-| `WHEEL` | path to the wheel (`.whl`) to extract metadata from |
+| `WHEEL` | path to the wheel (`.whl`) to extract content from |
+| `--src ZIP` | optional "trusted" wheel/zip whose members define the baseline for the `@src-*` synthetic keys; when omitted, those keys are not emitted |
 | `--base-dir DIR` | root directory for the EDB tree; a relative path is resolved against the project root (default: `.souffle`) |
 | `-v`, `--verbose` | enable verbose (debug) logging |
 
@@ -178,12 +187,13 @@ booleans are combined with `and` to produce the overall result. Exit code:
 `0` if the wheels are equal, `1` if they differ, `2` on error.
 
 ```sh
-poetry run compare-wheels WHEEL_A WHEEL_B
+poetry run compare-wheels WHEEL_A WHEEL_B [--src ZIP]
 ```
 
 | Argument / option | Description |
 | --- | --- |
 | `WHEEL_A`, `WHEEL_B` | paths to the two wheels (`.whl`) to compare |
+| `--src ZIP` | optional "trusted" wheel/zip whose `.py` members define the baseline set legitimately expected in a built wheel; any `.py` member of `WHEEL_A` or `WHEEL_B` not present in this baseline is flagged as suspicious. May be the same path as `WHEEL_A`, `WHEEL_B`, or any other zip. Does **not** affect the equality booleans — it's informational |
 | `--base-dir DIR` | root directory for EDB / IDB / projection artefacts; a relative path is resolved against the project root (default: `.souffle`) |
 | `-v`, `--verbose` | enable verbose (debug) logging |
 
@@ -199,7 +209,9 @@ The programmatic entry point
 
 plus the per-group booleans `metadata_equal`, `py_files_equal`,
 `other_files_equal`, and the lists of differing / one-sided member names for
-the `.py` and other-file groups.
+the `.py` and other-file groups. When `src` is supplied, the dict also
+carries `src` (the baseline path) and the two suspicious-member lists
+`py_files_unexpected_in_a` / `py_files_unexpected_in_b`.
 
 ### wheel-diff
 
@@ -251,6 +263,13 @@ and the markdown reports link to them with relative paths. Each report lists:
 - the overall result and the per-group results (metadata / `.py` / other);
 - a table of artefact paths for both builds;
 - the names of any members that differ or appear in only one build.
+
+For each pair the sweep also picks a "trusted" baseline (`src`) per the
+following policy and passes it to `compare-wheels`: if `macaron` is one of
+the pair's builds, the macaron wheel is `src`; otherwise the `ossr` wheel is
+`src`. Each per-pair report ends with a **Trust check** section listing any
+`.py` members in either build that are absent from the baseline. The trust
+check is informational and does not affect the per-group / overall booleans.
 
 A pair that raises during comparison is recorded as `ERROR` in its report;
 the sweep continues with the next pair. Exit code: `0` if no pair errored,

@@ -172,6 +172,31 @@ def _render_pair_report(
                 lines.append(f"- `{name}`")
             lines.append("")
 
+    if info.get("src") is not None:
+        lines.append("## Trust check")
+        lines.append("")
+        src_rel = _rel(info["src"], md_path)
+        lines.append(
+            f"Source baseline (`src`): [`{src_rel}`]({src_rel})"
+        )
+        lines.append("")
+        unexpected_a = info["py_files_unexpected_in_a"]
+        unexpected_b = info["py_files_unexpected_in_b"]
+        if not (unexpected_a or unexpected_b):
+            lines.append("No `.py` members in either build are absent from the baseline.")
+            lines.append("")
+        for label, items in (
+            (f"`.py` members in build A ({build_a}) not in baseline", unexpected_a),
+            (f"`.py` members in build B ({build_b}) not in baseline", unexpected_b),
+        ):
+            if not items:
+                continue
+            lines.append(f"### {label} ({len(items)})")
+            lines.append("")
+            for name in items:
+                lines.append(f"- `{name}`")
+            lines.append("")
+
     return "\n".join(lines) + "\n"
 
 
@@ -303,11 +328,23 @@ def run_experiments(sample_dir: Path, results_dir: Path) -> dict:
                 "comparing %s %s: %s vs %s", package, version, build_a, build_b
             )
 
+            # Pick the "trusted" src wheel per the run_experiments policy:
+            # if macaron is one of the pair's builds, that one is src;
+            # otherwise (ossr-vs-pypi) ossr is src.
+            if "macaron" in (build_a, build_b):
+                src_wheel = wheel_a if build_a == "macaron" else wheel_b
+            elif "ossr" in (build_a, build_b):
+                src_wheel = wheel_a if build_a == "ossr" else wheel_b
+            else:
+                src_wheel = None
+
             equal: bool | None
             info: dict | None
             error: str | None
             try:
-                equal, info = compare_wheels(wheel_a, wheel_b, base_dir=pair_base)
+                equal, info = compare_wheels(
+                    wheel_a, wheel_b, src=src_wheel, base_dir=pair_base,
+                )
                 error = None
             # broad catch: one bad pair must not abort the rest of the sweep.
             except Exception as exc:

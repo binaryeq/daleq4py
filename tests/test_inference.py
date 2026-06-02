@@ -53,8 +53,8 @@ def test_run_inference_rejects_edb_dir_without_facts(tmp_path):
 
 @requires_souffle
 def test_run_inference_creates_idb_directory_and_files(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    edb_dir = metadata_path.parent
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
 
     idb_dir = run_inference(edb_dir)
 
@@ -67,8 +67,8 @@ def test_run_inference_creates_idb_directory_and_files(edb_base_dir):
 
 @requires_souffle
 def test_run_inference_substitutes_all_placeholders(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    edb_dir = metadata_path.parent
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
     session_dir = edb_dir.parent
 
     run_inference(edb_dir)
@@ -77,9 +77,9 @@ def test_run_inference_substitutes_all_placeholders(edb_base_dir):
     assert merged.exists()
     text = merged.read_text(encoding="utf-8")
     for placeholder in (
-        "<edb-metadata-facts>",
+        "<edb-content-facts>",
         "<edb-package-facts>",
-        "<idb-metadata-facts>",
+        "<idb-content-facts>",
         "<idb-package-facts>",
     ):
         assert placeholder not in text, f"{placeholder} was not substituted"
@@ -90,22 +90,27 @@ def test_run_inference_substitutes_all_placeholders(edb_base_dir):
 
 
 @requires_souffle
-def test_run_inference_lifts_metadata_with_r_metadata_prefix(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    edb_dir = metadata_path.parent
+def test_run_inference_lifts_content_with_r_content_prefix(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
 
-    edb_ids = {row[0] for row in _read_rows(metadata_path)}
+    edb_ids = {row[0] for row in _read_rows(content_path)}
     idb_dir = run_inference(edb_dir)
     idb_ids = {row[0] for row in _read_rows(idb_dir / EDB_FILENAME)}
 
-    # the metadata rule rewrites each EDB id to R_METADATA[<id>].
-    assert idb_ids == {f"R_METADATA[{fid}]" for fid in edb_ids}
+    # Every IDB row is the lift of some EDB row with the R_CONTENT prefix.
+    # The IDB is a *subset* of the lifted EDB because metadata-normalisation
+    # rules can drop facts via idb.remove_content (e.g. the WHEEL generator
+    # entry for whitelisted build tools).
+    assert idb_ids <= {f"R_CONTENT[{fid}]" for fid in edb_ids}
+    # Sanity: the lift produced something.
+    assert idb_ids
 
 
 @requires_souffle
 def test_run_inference_lifts_package_with_r_package_prefix(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    edb_dir = metadata_path.parent
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
 
     edb_package_rows = _read_rows(edb_dir / PACKAGE_EDB_FILENAME)
     idb_dir = run_inference(edb_dir)

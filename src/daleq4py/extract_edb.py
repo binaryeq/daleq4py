@@ -1,31 +1,60 @@
 # Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
 
-"""Extract a metadata EDB (extensional database) from a Python wheel.
+"""Extract a content EDB (extensional database) from a Python wheel.
 
-A wheel keeps its metadata in a top-level ``*.dist-info`` directory. This
-module flattens every file in that directory into a Soufflé-friendly TSV table
-with the columns ``id``, ``file``, ``path``, ``key`` and ``value`` and writes
-it to ``<base_dir>/<wheel-name>/<session>/edb/metadata.tsv``. A companion
-file ``package.tsv`` in the same directory records the package descriptor
-with columns ``id``, ``key``, ``value`` (two rows: ``name`` and ``distinfo``).
+This module walks **every** member of the wheel zip and flattens each into a
+Soufflé-friendly TSV table with the columns ``id``, ``file``, ``path``,
+``key`` and ``value``. The result is written to
+``<base_dir>/<wheel-name>/<session>/edb/content.tsv``. A companion file
+``package.tsv`` in the same directory records the package descriptor with
+columns ``id``, ``key``, ``value`` (two rows: ``name`` and ``distinfo``).
 
-The ``id`` column carries a unique fact id (``F1``, ``F2``, ...) assigned
-in extraction order. The counter runs across both files so every fact in
-one EDB is uniquely identified.
+The ``id`` column carries a unique fact id (``F1``, ``F2``, ...) assigned in
+extraction order. The counter runs across both files so every fact in one
+EDB is uniquely identified.
 
-Files with an RFC 822 style ``Key: value`` header block (``METADATA``,
-``WHEEL``) contribute one row per pair. ``RECORD`` is comma-separated and
-contributes one row per packaged file: the first comma-separated token
-(the packaged file path) becomes the key and the rest of the line (e.g.
-``sha256=<digest>,<size>``) becomes the value. Any other unstructured
-file (``LICENSE``, ``AUTHORS``, ``top_level.txt``, ...) contributes a
-single row whose key is the empty string and whose value is the file's
-raw content.
+For each wheel member, two kinds of facts are emitted:
+
+* **Explicit keys** -- only for the recognised metadata files inside
+  ``*.dist-info/``:
+
+  * ``METADATA`` and ``WHEEL`` are parsed as RFC 822 header blocks (using
+    :func:`packaging.metadata.parse_email`), and contribute one row per
+    ``Key: value`` pair.
+  * ``RECORD`` is comma-separated and contributes one row per packaged file:
+    the first comma-separated token (the packaged file path) is the key and
+    the rest of the line (typically ``sha256=<digest>,<size>``) is the value.
+
+  Other files (``LICENSE``, ``top_level.txt``, ``entry_points.txt``, any
+  ``.py`` source, any resource) contribute no explicit rows -- their content
+  is captured by the synthetic keys below.
+
+* **Synthetic keys** -- for every member, regardless of location or type:
+
+  * ``@sha256`` -- SHA-256 of the raw (uncompressed) archive bytes.
+  * ``@norm/sha256`` -- SHA-256 after normalisation, emitted only for text
+    files (heuristic: no NUL byte in the first 8 KiB). For ``.py`` files the
+    normaliser is :func:`daleq4py.normalise_pysrc.normalise_source` (AST
+    round-trip; strips comments and canonicalises layout); for other text
+    files it is a pure LF normalisation of line endings.
+  * ``@src-exists`` -- ``true``/``false``; whether a member with the same
+    archive-relative path exists in the optional ``src`` baseline.
+  * ``@src-exists-moved`` -- ``true``/``false``; whether a member with the
+    same basename exists at any path in ``src``.
+  * ``@src/sha256``, ``@src/norm/sha256`` -- SHA-256 (raw / normalised) of
+    the matched src file. Emitted only when at least one of the two
+    ``@src-exists*`` keys is true. The match preference is path-equality
+    first, then the alphabetically-first basename match. ``@src/norm/sha256``
+    follows the same text-only rule as ``@norm/sha256``.
+  * ``@more/size`` -- uncompressed byte size of the archive member.
+
+  The four ``@src-*`` keys are omitted entirely when ``src`` is not supplied.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import re
 import sys
@@ -36,14 +65,24 @@ from pathlib import Path
 
 from packaging.metadata import parse_email
 
+from daleq4py.normalise_pysrc import normalise_source
 from daleq4py.wheel import WheelValidationError, validate_wheel
 
 logger = logging.getLogger("daleq4py")
 
 DIST_INFO_SUFFIX = ".dist-info"
-EDB_FILENAME = "metadata.tsv"
+EDB_FILENAME = "content.tsv"
 PACKAGE_EDB_FILENAME = "package.tsv"
 RECORD_FILENAME = "RECORD"
+
+# Synthetic-key constants (also re-exported for tests / downstream callers).
+KEY_SHA256 = "@sha256"
+KEY_NORM_SHA256 = "@norm/sha256"
+KEY_SRC_EXISTS = "@src-exists"
+KEY_SRC_EXISTS_MOVED = "@src-exists-moved"
+KEY_SRC_SHA256 = "@src/sha256"
+KEY_SRC_NORM_SHA256 = "@src/norm/sha256"
+KEY_MORE_SIZE = "@more/size"
 
 # Project root: <root>/src/daleq4py/extract_edb.py -> parents[2]. A relative
 # base directory is resolved against this so EDB files land inside the project
@@ -58,6 +97,12 @@ _SESSION_REFERENCE = 10**19
 
 # First meaningful line of an RFC 822 header block: "Token:" or "Token: value".
 _HEADER_LINE = re.compile(r"[^:\s][^:]*:(\s|$)")
+
+# Heuristic threshold for treating bytes as text: no NUL byte in this many
+# leading bytes. Same rule as :mod:`daleq4py.wheel_diff`.
+_TEXT_SNIFF_BYTES = 8192
+
+PY_SUFFIX = ".py"
 
 # (file, path, key, value)
 Row = tuple[str, str, str, str]
@@ -87,6 +132,73 @@ def _looks_like_headers(text: str) -> bool:
     return False
 
 
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _is_text(data: bytes) -> bool:
+    """Heuristic: text if no NUL byte appears in the first 8 KiB."""
+    return b"\x00" not in data[:_TEXT_SNIFF_BYTES]
+
+
+def _lf_normalise(data: bytes) -> bytes:
+    """Decode as UTF-8 (lossy), collapse CRLF/CR to LF, re-encode."""
+    return (
+        data.decode("utf-8", errors="replace")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .encode("utf-8")
+    )
+
+
+def _normalise_for_hash(file_name: str, data: bytes) -> bytes:
+    """Return the byte form to feed into :func:`_sha256` for ``@norm/sha256``.
+
+    For ``.py`` files: AST round-trip via ``normalise_source`` (drops
+    comments, canonicalises layout, output is already LF-terminated). If the
+    source won't parse, fall back to pure LF normalisation so we still emit
+    a stable hash.
+    For other text files: pure LF normalisation.
+    """
+    if file_name.endswith(PY_SUFFIX):
+        try:
+            return normalise_source(
+                data.decode("utf-8", errors="replace")
+            ).encode("utf-8")
+        except SyntaxError:
+            return _lf_normalise(data)
+    return _lf_normalise(data)
+
+
+def _load_src_index(
+    src: str | Path,
+) -> tuple[Path, dict[str, bytes], dict[str, list[str]]]:
+    """Validate ``src`` (a wheel/zip) and return (path, by-path, by-basename).
+
+    ``by_basename`` lists every src path sharing each basename, sorted, so
+    callers can pick the alphabetically-first match deterministically.
+    """
+    candidate = Path(src).expanduser()
+    if not candidate.is_file():
+        raise WheelValidationError(f"src is not a file: {src}")
+    if not zipfile.is_zipfile(candidate):
+        raise WheelValidationError(f"src is not a valid zip: {src}")
+    src_path = candidate.resolve()
+    by_path: dict[str, bytes] = {}
+    by_basename: dict[str, list[str]] = {}
+    with zipfile.ZipFile(src_path) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            data = archive.read(info.filename)
+            by_path[info.filename] = data
+            basename = info.filename.rsplit("/", 1)[-1]
+            by_basename.setdefault(basename, []).append(info.filename)
+    for paths in by_basename.values():
+        paths.sort()
+    return src_path, by_path, by_basename
+
+
 def _rows_for_record(file_name: str, dir_path: str, text: str) -> list[Row]:
     """Turn ``RECORD`` (comma-separated, one line per packaged file) into rows.
 
@@ -103,23 +215,20 @@ def _rows_for_record(file_name: str, dir_path: str, text: str) -> list[Row]:
     return rows
 
 
-def _rows_for_member(file_name: str, dir_path: str, text: str) -> list[Row]:
-    """Turn one ``*.dist-info`` file into ``(file, path, key, value)`` rows.
+def _explicit_rows(file_name: str, dir_path: str, data: bytes) -> list[Row]:
+    """Return the explicit key-value rows for a wheel member, or [].
 
-    ``RECORD`` is comma-separated and contributes one row per packaged file
-    (see :func:`_rows_for_record`). RFC 822 files (``METADATA``, ``WHEEL``)
-    are parsed with :func:`packaging.metadata.parse_email`, which normalises
-    field names, splits multi-value fields and folds long-description bodies
-    into the ``description`` field. Any other unstructured file (``LICENSE``,
-    ``top_level.txt``, ...) keeps its raw content as a single value row with
-    an empty key.
+    Only the recognised metadata files contribute explicit rows: ``RECORD``
+    (per-line) and any RFC 822 file with a ``Key: value`` header block
+    (``METADATA``, ``WHEEL``). All other members produce only synthetic rows.
     """
     if file_name == RECORD_FILENAME:
-        return _rows_for_record(file_name, dir_path, text)
+        return _rows_for_record(
+            file_name, dir_path, data.decode("utf-8", errors="replace")
+        )
+
+    text = data.decode("utf-8", errors="replace")
     if not _looks_like_headers(text):
-        # parse_email would otherwise misclassify these as a description body.
-        if text.strip():
-            return [(file_name, dir_path, "", text.strip())]
         return []
 
     raw, unparsed = parse_email(text)
@@ -144,6 +253,79 @@ def _rows_for_member(file_name: str, dir_path: str, text: str) -> list[Row]:
     return rows
 
 
+def _synthetic_rows(
+    file_name: str,
+    dir_path: str,
+    data: bytes,
+    *,
+    src_by_path: dict[str, bytes] | None,
+    src_by_basename: dict[str, list[str]] | None,
+) -> list[Row]:
+    """Return the synthetic key rows for one wheel member.
+
+    ``src_by_path`` / ``src_by_basename`` are ``None`` when no ``src`` was
+    supplied -- in that case the four ``@src-*`` rows are omitted.
+    """
+    rows: list[Row] = []
+    full_path = f"{dir_path}/{file_name}" if dir_path else file_name
+    text_like = _is_text(data)
+
+    # @sha256 -- always.
+    rows.append((file_name, dir_path, KEY_SHA256, _sha256(data)))
+
+    # @norm/sha256 -- only when the bytes look like text.
+    if text_like:
+        rows.append((
+            file_name, dir_path,
+            KEY_NORM_SHA256,
+            _sha256(_normalise_for_hash(file_name, data)),
+        ))
+
+    # @src-* -- only when a src baseline is supplied.
+    if src_by_path is not None and src_by_basename is not None:
+        path_match: bytes | None = src_by_path.get(full_path)
+        basename_matches: list[str] = src_by_basename.get(file_name, [])
+        path_exists = path_match is not None
+        moved_exists = bool(basename_matches)
+
+        rows.append((
+            file_name, dir_path,
+            KEY_SRC_EXISTS,
+            "true" if path_exists else "false",
+        ))
+        rows.append((
+            file_name, dir_path,
+            KEY_SRC_EXISTS_MOVED,
+            "true" if moved_exists else "false",
+        ))
+
+        # Pick the matched src file: prefer same-path; otherwise the
+        # alphabetically-first basename match.
+        matched_bytes: bytes | None = None
+        if path_exists:
+            matched_bytes = path_match
+        elif basename_matches:
+            matched_bytes = src_by_path[basename_matches[0]]
+
+        if matched_bytes is not None:
+            rows.append((
+                file_name, dir_path,
+                KEY_SRC_SHA256,
+                _sha256(matched_bytes),
+            ))
+            if _is_text(matched_bytes):
+                rows.append((
+                    file_name, dir_path,
+                    KEY_SRC_NORM_SHA256,
+                    _sha256(_normalise_for_hash(file_name, matched_bytes)),
+                ))
+
+    # @more/size -- always.
+    rows.append((file_name, dir_path, KEY_MORE_SIZE, str(len(data))))
+
+    return rows
+
+
 def _write_tsv(path: Path, rows) -> None:
     """Write ``rows`` (any iterable of string tuples) as escaped TSV."""
     with path.open("w", encoding="utf-8", newline="\n") as out:
@@ -152,30 +334,45 @@ def _write_tsv(path: Path, rows) -> None:
 
 
 def extract_edb(
-    wheel: str | Path, base_dir: str | Path = DEFAULT_BASE_DIR
+    wheel: str | Path,
+    base_dir: str | Path = DEFAULT_BASE_DIR,
+    src: str | Path | None = None,
 ) -> Path:
-    """Extract the metadata EDB from ``wheel`` and return the metadata TSV path.
+    """Extract the content EDB from ``wheel`` and return the content TSV path.
 
-    Two files are written to
-    ``<base_dir>/<wheel-name>/<session>/edb/``:
+    Two files are written to ``<base_dir>/<wheel-name>/<session>/edb/``:
 
-    * ``metadata.tsv`` -- ``(id, file, path, key, value)`` rows extracted
-      from every file in the wheel's ``*.dist-info`` directory.
+    * ``content.tsv`` -- ``(id, file, path, key, value)`` rows extracted from
+      **every** member of the wheel. See the module docstring for the
+      explicit / synthetic key catalogue.
     * ``package.tsv`` -- ``(id, key, value)`` descriptor with two rows:
       ``name`` (the package's ``<name>-<version>`` token, taken from the
       dist-info directory) and ``distinfo`` (the dist-info directory name).
 
-    The ``id`` column is a unique counter (``F1``, ``F2``, ...) shared
-    across both files, so every fact in one EDB has a distinct identifier.
+    The ``id`` column is a unique counter (``F1``, ``F2``, ...) shared across
+    both files, so every fact in one EDB has a distinct identifier.
 
     ``<wheel-name>`` is the wheel filename without its ``.whl`` suffix and
     ``<session>`` is a freshly generated id. A relative ``base_dir`` is
     resolved against the project root, not the current working directory. The
-    returned :class:`~pathlib.Path` is the ``metadata.tsv`` file; the package
+    returned :class:`~pathlib.Path` is the ``content.tsv`` file; the package
     descriptor sits alongside it in the same directory.
+
+    ``src`` is an optional "trusted" wheel/zip whose ``.py`` (and other)
+    members define a baseline used to populate the ``@src-*`` synthetic keys.
+    When ``src`` is ``None`` those keys are omitted entirely.
     """
     wheel_path = validate_wheel(str(wheel))
     wheel_name = wheel_path.stem
+
+    src_path: Path | None = None
+    src_by_path: dict[str, bytes] | None = None
+    src_by_basename: dict[str, list[str]] | None = None
+    if src is not None:
+        src_path, src_by_path, src_by_basename = _load_src_index(src)
+        logger.info(
+            "src baseline: %s (%d member(s))", src_path, len(src_by_path)
+        )
 
     rows: list[Row] = []
     dist_info_dirs: set[str] = set()
@@ -184,13 +381,23 @@ def extract_edb(
             if info.is_dir():
                 continue
             parts = info.filename.split("/")
-            if not parts[0].endswith(DIST_INFO_SUFFIX):
-                continue  # only the .dist-info directory holds metadata
-            dist_info_dirs.add(parts[0])
             file_name = parts[-1]
             dir_path = "/".join(parts[:-1])
-            text = archive.read(info.filename).decode("utf-8", errors="replace")
-            rows.extend(_rows_for_member(file_name, dir_path, text))
+
+            if parts[0].endswith(DIST_INFO_SUFFIX):
+                dist_info_dirs.add(parts[0])
+
+            data = archive.read(info.filename)
+
+            # Explicit rows first (only for recognised metadata files), then
+            # the synthetic rows for this member. Keeping them contiguous in
+            # the TSV makes the EDB easier to inspect by eye.
+            rows.extend(_explicit_rows(file_name, dir_path, data))
+            rows.extend(_synthetic_rows(
+                file_name, dir_path, data,
+                src_by_path=src_by_path,
+                src_by_basename=src_by_basename,
+            ))
 
     if len(dist_info_dirs) != 1:
         raise WheelValidationError(
@@ -211,8 +418,8 @@ def extract_edb(
     # Unique fact ids "F1", "F2", ... shared across both files.
     fact_ids = (f"F{n}" for n in count(1))
 
-    metadata_path = edb_dir / EDB_FILENAME
-    _write_tsv(metadata_path, [(next(fact_ids), *row) for row in rows])
+    content_path = edb_dir / EDB_FILENAME
+    _write_tsv(content_path, [(next(fact_ids), *row) for row in rows])
 
     package_path = edb_dir / PACKAGE_EDB_FILENAME
     _write_tsv(
@@ -223,23 +430,35 @@ def extract_edb(
         ],
     )
 
-    logger.info("extracted %d metadata rows to %s", len(rows), metadata_path)
+    logger.info("extracted %d content rows to %s", len(rows), content_path)
     logger.info("wrote package descriptor to %s", package_path)
-    return metadata_path
+    return content_path
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="extract-edb",
         description=(
-            "Extract a metadata EDB (TSV) from a Python wheel's .dist-info "
-            "directory."
+            "Extract a content EDB (TSV) from a Python wheel; covers every "
+            "member of the wheel, emitting explicit rows for recognised "
+            "metadata files and synthetic rows (sha256, normalised sha256, "
+            "size, optional src-baseline cross-references) for every file."
         ),
     )
     parser.add_argument(
         "wheel",
         metavar="WHEEL",
-        help="path to the Python wheel (.whl) to extract metadata from",
+        help="path to the Python wheel (.whl) to extract content from",
+    )
+    parser.add_argument(
+        "--src",
+        metavar="ZIP",
+        default=None,
+        help=(
+            "optional 'trusted' wheel/zip whose members define the baseline "
+            "for the @src-* synthetic keys; when omitted, no @src-* facts "
+            "are emitted"
+        ),
     )
     parser.add_argument(
         "--base-dir",
@@ -270,7 +489,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
-        edb_path = extract_edb(args.wheel, args.base_dir)
+        edb_path = extract_edb(args.wheel, args.base_dir, src=args.src)
     except WheelValidationError as exc:
         logger.error("invalid wheel: %s", exc)
         return 1

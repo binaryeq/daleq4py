@@ -41,9 +41,9 @@ def test_project_idb_rejects_empty_dir(tmp_path):
 # --- .decl parsing (no souffle invocation needed) ---
 
 
-def test_parse_decls_extracts_metadata_and_package_columns():
+def test_parse_decls_extracts_content_and_package_columns():
     decls = _parse_decls(RULES_DIR)
-    assert decls["metadata"] == ["id", "file", "path", "key", "value"]
+    assert decls["content"] == ["id", "file", "path", "key", "value"]
     assert decls["package"] == ["id", "key", "value"]
 
 
@@ -52,8 +52,8 @@ def test_parse_decls_extracts_metadata_and_package_columns():
 
 @requires_souffle
 def test_project_idb_writes_summary_in_session_dir(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    idb_dir = run_inference(metadata_path.parent)
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
     session_dir = idb_dir.parent
 
     summary = project_idb(idb_dir)
@@ -64,13 +64,13 @@ def test_project_idb_writes_summary_in_session_dir(edb_base_dir):
 
 @requires_souffle
 def test_project_idb_contains_predicate_sections_and_headers(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    idb_dir = run_inference(metadata_path.parent)
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
 
     text = project_idb(idb_dir).read_text(encoding="utf-8")
 
     # Both predicate sections are present, one header each.
-    assert "## metadata" in text
+    assert "## content" in text
     assert "## package" in text
     # Column headers are taken from the .decl in rules/core.souffle.
     assert "| id | file | path | key | value |" in text
@@ -79,22 +79,22 @@ def test_project_idb_contains_predicate_sections_and_headers(edb_base_dir):
 
 @requires_souffle
 def test_project_idb_includes_sample_facts(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    idb_dir = run_inference(metadata_path.parent)
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
 
     text = project_idb(idb_dir).read_text(encoding="utf-8")
     # Package facts derived from colorlog's dist-info.
     assert "colorlog-6.7.0" in text
     assert "colorlog-6.7.0.dist-info" in text
     # R_METADATA / R_PACKAGE prefixes attached by the lift rules.
-    assert "R_METADATA[" in text
+    assert "R_CONTENT[" in text
     assert "R_PACKAGE[" in text
 
 
 @requires_souffle
 def test_project_idb_table_row_count_matches_facts(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    idb_dir = run_inference(metadata_path.parent)
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
 
     package_facts = (idb_dir / "package.tsv").read_text(encoding="utf-8").splitlines()
     text = project_idb(idb_dir).read_text(encoding="utf-8")
@@ -110,21 +110,21 @@ def test_project_idb_table_row_count_matches_facts(edb_base_dir):
 
 @requires_souffle
 def test_project_idb_default_keeps_id_column(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    idb_dir = run_inference(metadata_path.parent)
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
 
     summary = project_idb(idb_dir, remove_derivation=False)
 
     assert summary.name == SUMMARY_FILENAME
     text = summary.read_text(encoding="utf-8")
     assert "| id | file | path | key | value |" in text
-    assert "R_METADATA[" in text
+    assert "R_CONTENT[" in text
 
 
 @requires_souffle
 def test_project_idb_remove_derivation_uses_reduced_filename(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    idb_dir = run_inference(metadata_path.parent)
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
 
     summary = project_idb(idb_dir, remove_derivation=True)
 
@@ -135,17 +135,17 @@ def test_project_idb_remove_derivation_uses_reduced_filename(edb_base_dir):
 
 @requires_souffle
 def test_project_idb_remove_derivation_drops_id_column(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    idb_dir = run_inference(metadata_path.parent)
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
 
     text = project_idb(idb_dir, remove_derivation=True).read_text(encoding="utf-8")
 
     # Header rows no longer carry the id column.
     assert "| file | path | key | value |" in text
     assert "| key | value |" in text
-    # Neither the original ``id`` header nor any R_METADATA/R_PACKAGE entry remains.
+    # Neither the original ``id`` header nor any R_CONTENT/R_PACKAGE entry remains.
     assert "| id | " not in text
-    assert "R_METADATA[" not in text
+    assert "R_CONTENT[" not in text
     assert "R_PACKAGE[" not in text
     # Actual facts are still rendered.
     assert "colorlog-6.7.0" in text
@@ -153,8 +153,8 @@ def test_project_idb_remove_derivation_drops_id_column(edb_base_dir):
 
 @requires_souffle
 def test_project_idb_both_modes_produce_separate_files(edb_base_dir):
-    metadata_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    idb_dir = run_inference(metadata_path.parent)
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
 
     full = project_idb(idb_dir)
     reduced = project_idb(idb_dir, remove_derivation=True)

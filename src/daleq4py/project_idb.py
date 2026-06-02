@@ -112,7 +112,7 @@ def project_idb(
 
     With ``remove_derivation=True`` the output filename gains a ``-reduced``
     suffix and the leading ``id`` column (the rule provenance trace such as
-    ``R_METADATA[F1]``) is omitted from each table.
+    ``R_CONTENT[F1]``) is omitted from each table.
     """
     idb_dir = Path(idb_dir).resolve()
     if not idb_dir.is_dir():

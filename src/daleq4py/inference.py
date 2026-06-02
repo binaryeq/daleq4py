@@ -41,9 +41,9 @@ SOUFFLE_EXECUTABLE = "souffle"
 
 # Placeholders inside the merged rules file that get substituted with
 # absolute paths before souffle is invoked.
-_EDB_METADATA_PLACEHOLDER = "<edb-metadata-facts>"
+_EDB_CONTENT_PLACEHOLDER = "<edb-content-facts>"
 _EDB_PACKAGE_PLACEHOLDER = "<edb-package-facts>"
-_IDB_METADATA_PLACEHOLDER = "<idb-metadata-facts>"
+_IDB_CONTENT_PLACEHOLDER = "<idb-content-facts>"
 _IDB_PACKAGE_PLACEHOLDER = "<idb-package-facts>"
 
 
@@ -55,7 +55,7 @@ def run_inference(edb_dir: str | Path) -> Path:
     """Run souffle inference on ``edb_dir`` and return the IDB directory.
 
     ``edb_dir`` must be an ``edb/`` directory holding the two TSVs produced
-    by :func:`daleq4py.extract_edb.extract_edb` (``metadata.tsv`` and
+    by :func:`daleq4py.extract_edb.extract_edb` (``content.tsv`` and
     ``package.tsv``). The merged Soufflé file and the ``idb/`` directory are
     written next to it inside the same session directory.
     """
@@ -67,9 +67,9 @@ def run_inference(edb_dir: str | Path) -> Path:
             f"expected an 'edb' directory, got: {edb_dir.name!r}"
         )
 
-    metadata_edb = edb_dir / EDB_FILENAME
+    content_edb = edb_dir / EDB_FILENAME
     package_edb = edb_dir / PACKAGE_EDB_FILENAME
-    for required in (metadata_edb, package_edb):
+    for required in (content_edb, package_edb):
         if not required.exists():
             raise InferenceError(f"missing fact file: {required}")
 
@@ -81,7 +81,7 @@ def run_inference(edb_dir: str | Path) -> Path:
     idb_dir = session_dir / "idb"
     idb_dir.mkdir(parents=True, exist_ok=True)
 
-    metadata_idb = idb_dir / EDB_FILENAME
+    content_idb = idb_dir / EDB_FILENAME
     package_idb = idb_dir / PACKAGE_EDB_FILENAME
 
     # Substitute paths relative to ``session_dir`` (rather than absolute) so
@@ -103,9 +103,9 @@ def run_inference(edb_dir: str | Path) -> Path:
     merged_path = session_dir / MERGED_FILENAME
     rule_text = (
         "".join(merged_chunks)
-        .replace(_EDB_METADATA_PLACEHOLDER, _rel(metadata_edb))
+        .replace(_EDB_CONTENT_PLACEHOLDER, _rel(content_edb))
         .replace(_EDB_PACKAGE_PLACEHOLDER, _rel(package_edb))
-        .replace(_IDB_METADATA_PLACEHOLDER, _rel(metadata_idb))
+        .replace(_IDB_CONTENT_PLACEHOLDER, _rel(content_idb))
         .replace(_IDB_PACKAGE_PLACEHOLDER, _rel(package_idb))
     )
     merged_path.write_text(rule_text, encoding="utf-8")

@@ -9,37 +9,37 @@
 //            ``id``).
 //   * idb -- the intensional database of predicates derived from the EDB.
 //
-// A single pass-through rule lifts every edb.metadata fact into idb.metadata
+// A single pass-through rule lifts every edb.content fact into idb.content
 // so that downstream rules can reason exclusively over the IDB.
 //
 // The file paths `<*>` are template placeholders that the caller substitutes
 // before souffle is invoked:
 //
-//   <edb-metadata-facts> , <edb-package-facts>  input TSV paths
-//   <idb-metadata-facts> , <idb-package-facts>  output TSV paths
+//   <edb-content-facts> , <edb-package-facts>  input TSV paths
+//   <idb-content-facts> , <idb-package-facts>  output TSV paths
 
 
 .comp Edb {
-    .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
+    .decl content(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
     .decl package(id: symbol, key: symbol, value: symbol)
 }
 
 .comp Idb {
-    .decl metadata(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
+    .decl content(id: symbol, file: symbol, path: symbol, key: symbol, value: symbol)
     .decl package(id: symbol, key: symbol, value: symbol)
     // guard to override default lifting rule
-    .decl remove_metadata(id: symbol, file: symbol, path: symbol, key: symbol)
+    .decl remove_content(id: symbol, file: symbol, path: symbol, key: symbol)
 }
 
 .init edb = Edb
 .init idb = Idb
 
-.input edb.metadata(IO=file, filename="<edb-metadata-facts>", delimiter="\t")
+.input edb.content(IO=file, filename="<edb-content-facts>", delimiter="\t")
 .input edb.package(IO=file, filename="<edb-package-facts>", delimiter="\t")
-.output idb.metadata(IO=file, filename="<idb-metadata-facts>", delimiter="\t")
+.output idb.content(IO=file, filename="<idb-content-facts>", delimiter="\t")
 .output idb.package(IO=file, filename="<idb-package-facts>", delimiter="\t")
 
 
 // lift every extensional fact into the intensional database.
-idb.metadata(cat("R_METADATA","[",id,"]"), file, path, key, value) :- edb.metadata(id, file, path, key, value), !idb.remove_metadata(_, file, path, key).
+idb.content(cat("R_CONTENT","[",id,"]"), file, path, key, value) :- edb.content(id, file, path, key, value), !idb.remove_content(_, file, path, key).
 idb.package(cat("R_PACKAGE","[",id,"]"), key, value) :- edb.package(id, key, value).
