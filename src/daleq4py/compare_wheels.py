@@ -2,7 +2,7 @@
 
 """Compare two Python wheels using the daleq4py pipeline.
 
-The comparison partitions every file in a wheel into three groups and applies
+The comparison partitions every file in a wheel into four groups and applies
 a different equality test to each:
 
 1. **dist-info metadata** -- for both wheels, run the full pipeline
@@ -13,11 +13,16 @@ a different equality test to each:
    sources with :func:`daleq4py.normalise_pysrc.normalise_source` and compare
    the results character by character. Members present in only one wheel
    count as a difference.
-3. **everything else** -- byte-by-byte comparison of every shared non-``.py``
-   member outside ``*.dist-info``. Members present in only one wheel count as
-   a difference.
+3. **other text files** -- non-``.py`` members outside ``*.dist-info`` whose
+   extension is listed in :file:`text_extensions.txt` (``.js``, ``.html``,
+   ``.css``, ``.properties``, ...). Each shared pair is compared after a pure
+   line-ending normalisation (CRLF / CR collapsed to ``\\n``). Members present
+   in only one wheel count as a difference.
+4. **everything else** -- byte-by-byte comparison of every remaining shared
+   member (binary resources and any text file whose extension is not listed).
+   Members present in only one wheel count as a difference.
 
-The three per-group booleans are combined with ``and`` to produce the overall
+The four per-group booleans are combined with ``and`` to produce the overall
 result.
 """
 
@@ -47,6 +52,42 @@ logger = logging.getLogger("daleq4py.compare_wheels")
 
 PY_SUFFIX = ".py"
 
+# File listing the extensions (one per line, leading dot, '#' comments) whose
+# members are compared after line-ending normalisation rather than byte-by-byte.
+TEXT_EXTENSIONS_FILE = Path(__file__).with_name("text_extensions.txt")
+
+
+def _load_text_extensions() -> frozenset[str]:
+    """Read :data:`TEXT_EXTENSIONS_FILE` into a set of lowercase extensions.
+
+    Blank lines and lines starting with ``#`` are ignored. Each remaining line
+    is a single extension including the leading dot (e.g. ``.js``).
+    """
+    extensions: set[str] = set()
+    for line in TEXT_EXTENSIONS_FILE.read_text(encoding="utf-8").splitlines():
+        token = line.strip()
+        if not token or token.startswith("#"):
+            continue
+        extensions.add(token.lower())
+    return frozenset(extensions)
+
+
+TEXT_EXTENSIONS = _load_text_extensions()
+
+
+def _lf_normalise(data: bytes) -> bytes:
+    """Decode as UTF-8 (lossy), collapse CRLF/CR to LF, re-encode."""
+    return (
+        data.decode("utf-8", errors="replace")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .encode("utf-8")
+    )
+
+def _is_text_member(name: str) -> bool:
+    """True if ``name`` has an extension listed in :data:`TEXT_EXTENSIONS`."""
+    return Path(name).suffix.lower() in TEXT_EXTENSIONS
+
 
 def _py_member_paths(archive_path: Path) -> set[str]:
     """Return the set of ``.py`` member paths in a wheel or zip archive."""
@@ -61,9 +102,14 @@ def _py_member_paths(archive_path: Path) -> set[str]:
 
 
 def _classify_members(wheel: Path) -> dict[str, list[str]]:
-    """Group wheel members into dist-info, .py, and other buckets."""
+    """Group wheel members into dist-info, .py, text, and other buckets.
+
+    A non-``.py`` member outside ``*.dist-info`` lands in ``text_files`` when
+    its extension is listed in :data:`TEXT_EXTENSIONS`, otherwise in ``other``.
+    """
     dist_info: list[str] = []
     py_files: list[str] = []
+    text_files: list[str] = []
     other: list[str] = []
     with zipfile.ZipFile(wheel) as archive:
         for info in archive.infolist():
@@ -75,9 +121,16 @@ def _classify_members(wheel: Path) -> dict[str, list[str]]:
                 dist_info.append(name)
             elif name.endswith(PY_SUFFIX):
                 py_files.append(name)
+            elif _is_text_member(name):
+                text_files.append(name)
             else:
                 other.append(name)
-    return {"dist_info": dist_info, "py_files": py_files, "other": other}
+    return {
+        "dist_info": dist_info,
+        "py_files": py_files,
+        "text_files": text_files,
+        "other": other,
+    }
 
 
 def _run_metadata_pipeline(
@@ -127,6 +180,21 @@ def _compare_py_members(
     return mismatches
 
 
+def _compare_text_members(
+    wheel_a: Path, wheel_b: Path, names: list[str]
+) -> list[str]:
+    """Compare each shared text member after LF normalisation.
+
+    Returns the names whose normalised contents differ.
+    """
+    mismatches: list[str] = []
+    with zipfile.ZipFile(wheel_a) as za, zipfile.ZipFile(wheel_b) as zb:
+        for name in names:
+            if _lf_normalise(za.read(name)) != _lf_normalise(zb.read(name)):
+                mismatches.append(name)
+    return mismatches
+
+
 def _compare_byte_members(
     wheel_a: Path, wheel_b: Path, names: list[str]
 ) -> list[str]:
@@ -151,7 +219,7 @@ def compare_wheels(
     baseline set of source files legitimately expected in a built wheel. When
     provided, any ``.py`` member of ``wheel_a`` or ``wheel_b`` that is not in
     the baseline is flagged in ``info`` as suspicious. ``src`` does NOT
-    influence the three equality booleans or the overall result.
+    influence the four equality booleans or the overall result.
 
     Returns ``(overall_equal, info)``. ``info`` carries the paths to the input
     wheels, EDB / IDB directories, both projections (full and reduced) and the
@@ -202,7 +270,18 @@ def compare_wheels(
         not py_only_in_a and not py_only_in_b and not py_mismatches
     )
 
-    # (3) everything else -- byte equality on the shared set.
+    # (3) other text files -- LF-normalise then compare on the shared set.
+    text_a = set(members_a["text_files"])
+    text_b = set(members_b["text_files"])
+    text_only_in_a = sorted(text_a - text_b)
+    text_only_in_b = sorted(text_b - text_a)
+    text_common = sorted(text_a & text_b)
+    text_mismatches = _compare_text_members(a, b, text_common)
+    text_files_equal = (
+        not text_only_in_a and not text_only_in_b and not text_mismatches
+    )
+
+    # (4) everything else -- byte equality on the shared set.
     other_a = set(members_a["other"])
     other_b = set(members_b["other"])
     other_only_in_a = sorted(other_a - other_b)
@@ -222,7 +301,12 @@ def compare_wheels(
         py_unexpected_in_a = sorted(set(members_a["py_files"]) - src_py_paths)
         py_unexpected_in_b = sorted(set(members_b["py_files"]) - src_py_paths)
 
-    overall = metadata_equal and py_files_equal and other_files_equal
+    overall = (
+        metadata_equal
+        and py_files_equal
+        and text_files_equal
+        and other_files_equal
+    )
 
     info: dict = {
         "wheels": {"a": a, "b": b},
@@ -240,22 +324,27 @@ def compare_wheels(
         },
         "metadata_equal": metadata_equal,
         "py_files_equal": py_files_equal,
+        "text_files_equal": text_files_equal,
         "other_files_equal": other_files_equal,
         "py_files_mismatches": py_mismatches,
         "py_files_only_in_a": py_only_in_a,
         "py_files_only_in_b": py_only_in_b,
         "py_files_unexpected_in_a": py_unexpected_in_a,
         "py_files_unexpected_in_b": py_unexpected_in_b,
+        "text_files_mismatches": text_mismatches,
+        "text_files_only_in_a": text_only_in_a,
+        "text_files_only_in_b": text_only_in_b,
         "other_files_mismatches": other_mismatches,
         "other_files_only_in_a": other_only_in_a,
         "other_files_only_in_b": other_only_in_b,
     }
 
     logger.info(
-        "result: equal=%s (metadata=%s, py=%s, other=%s)",
+        "result: equal=%s (metadata=%s, py=%s, text=%s, other=%s)",
         overall,
         metadata_equal,
         py_files_equal,
+        text_files_equal,
         other_files_equal,
     )
     return overall, info
@@ -279,6 +368,7 @@ def _print_report(equal: bool, info: dict) -> None:
     print(f"equal: {equal}")
     print(f"  metadata_equal:    {info['metadata_equal']}")
     print(f"  py_files_equal:    {info['py_files_equal']}")
+    print(f"  text_files_equal:  {info['text_files_equal']}")
     print(f"  other_files_equal: {info['other_files_equal']}")
     print()
     print("artefacts:")
@@ -306,6 +396,12 @@ def _print_report(equal: bool, info: dict) -> None:
         info["py_files_mismatches"],
     )
     _print_diffs(
+        "text file",
+        info["text_files_only_in_a"],
+        info["text_files_only_in_b"],
+        info["text_files_mismatches"],
+    )
+    _print_diffs(
         "other file",
         info["other_files_only_in_a"],
         info["other_files_only_in_b"],
@@ -331,8 +427,9 @@ def _build_parser() -> argparse.ArgumentParser:
         description=(
             "Compare two Python wheels: dist-info metadata via the EDB / "
             "Soufflé / projection pipeline (reduced summaries compared "
-            "char-by-char), .py sources after normalisation, and any other "
-            "files byte-by-byte."
+            "char-by-char), .py sources after normalisation, other text "
+            "files (by extension) after line-ending normalisation, and any "
+            "remaining files byte-by-byte."
         ),
     )
     parser.add_argument(

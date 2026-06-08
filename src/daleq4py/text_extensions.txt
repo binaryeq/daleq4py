@@ -1,0 +1,47 @@
+# Extensions of text files compared by line-ending normalisation in
+# daleq4py.compare_wheels (group 3a). One extension per line, leading dot
+# included; matching is case-insensitive. Blank lines and lines starting
+# with '#' are ignored. ".py" is deliberately absent (handled separately
+# by AST normalisation) as are dist-info metadata files (handled by the
+# Souffle pipeline).
+
+# Web / markup
+.html
+.htm
+.css
+.js
+.mjs
+.cjs
+.xml
+.svg
+
+# Data / config
+.json
+.yaml
+.yml
+.toml
+.ini
+.cfg
+.conf
+.properties
+.env
+
+# Documentation / plain text
+.txt
+.md
+.rst
+.csv
+.tsv
+
+# Shell / scripts
+.sh
+.bat
+.ps1
+
+# Other source / interface files
+.c
+.h
+.pyi
+.pyx
+.pxd
+.sql

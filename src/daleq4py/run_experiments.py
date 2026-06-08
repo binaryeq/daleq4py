@@ -83,6 +83,9 @@ _DIFF_SECTIONS = (
     ("py_files_only_in_a", "Python source files only in build A"),
     ("py_files_only_in_b", "Python source files only in build B"),
     ("py_files_mismatches", "Python source files that differ after normalisation"),
+    ("text_files_only_in_a", "Text files only in build A"),
+    ("text_files_only_in_b", "Text files only in build B"),
+    ("text_files_mismatches", "Text files that differ after line-ending normalisation"),
     ("other_files_only_in_a", "Other files only in build A"),
     ("other_files_only_in_b", "Other files only in build B"),
     ("other_files_mismatches", "Other files that differ byte-by-byte"),
@@ -146,6 +149,7 @@ def _render_pair_report(
         f"| **Overall** | **{_yes_no(equal)}** |",
         f"| Metadata (`*.dist-info`, char-by-char on reduced projection) | {_yes_no(info['metadata_equal'])} |",
         f"| Python sources (`*.py`, char-by-char after normalisation) | {_yes_no(info['py_files_equal'])} |",
+        f"| Text files (line-ending normalisation) | {_yes_no(info['text_files_equal'])} |",
         f"| Other files (byte-by-byte) | {_yes_no(info['other_files_equal'])} |",
         "",
         "## Artefacts",
@@ -268,8 +272,8 @@ def _render_summary(summary: dict) -> str:
         "",
         "## Details",
         "",
-        "| Package | Builds | Overall | Metadata | Python sources | Other files |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Package | Builds | Overall | Metadata | Python sources | Text files | Other files |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for o in outcomes:
         report_rel = os.path.relpath(o["report"], summary["results_dir"])
@@ -280,6 +284,7 @@ def _render_summary(summary: dict) -> str:
             f"{_cell(o['overall'])} | "
             f"{_cell(o['metadata'])} | "
             f"{_cell(o['py_files'])} | "
+            f"{_cell(o['text_files'])} | "
             f"{_cell(o['other_files'])} |"
         )
     lines.append("")
@@ -440,6 +445,7 @@ def run_experiments(sample_dir: Path, results_dir: Path) -> dict:
                 "overall": equal,
                 "metadata": info["metadata_equal"] if info else None,
                 "py_files": info["py_files_equal"] if info else None,
+                "text_files": info["text_files_equal"] if info else None,
                 "other_files": info["other_files_equal"] if info else None,
                 "report": md_path,
             })

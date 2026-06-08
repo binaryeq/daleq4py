@@ -1,5 +1,0 @@
-// Author: Jens Dietrich (https://github.com/jensdietrich/)
-
-// rule to normalise python code
-// remove raw sha code, only keep sha of normalized file
-idb.remove_content(cat("R_NORMALIZE_PY","[",id1,"]"), name, path, "@sha256") :- edb.content(id1,name, path,"@sha256",_),match("*.py", name).

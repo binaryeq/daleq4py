@@ -46,7 +46,6 @@ For each wheel member, two kinds of facts are emitted:
     ``@src-exists*`` keys is true. The match preference is path-equality
     first, then the alphabetically-first basename match. ``@src/norm/sha256``
     follows the same text-only rule as ``@norm/sha256``.
-  * ``@more/size`` -- uncompressed byte size of the archive member.
 
   The four ``@src-*`` keys are omitted entirely when ``src`` is not supplied.
 """
@@ -82,7 +81,6 @@ KEY_SRC_EXISTS = "@src-exists"
 KEY_SRC_EXISTS_MOVED = "@src-exists-moved"
 KEY_SRC_SHA256 = "@src/sha256"
 KEY_SRC_NORM_SHA256 = "@src/norm/sha256"
-KEY_MORE_SIZE = "@more/size"
 
 # Project root: <root>/src/daleq4py/extract_edb.py -> parents[2]. A relative
 # base directory is resolved against this so EDB files land inside the project
@@ -319,9 +317,6 @@ def _synthetic_rows(
                     KEY_SRC_NORM_SHA256,
                     _sha256(_normalise_for_hash(file_name, matched_bytes)),
                 ))
-
-    # @more/size -- always.
-    rows.append((file_name, dir_path, KEY_MORE_SIZE, str(len(data))))
 
     return rows
 

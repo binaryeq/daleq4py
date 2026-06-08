@@ -1,0 +1,34 @@
+// Author: Jens Dietrich (https://github.com/jensdietrich/)
+
+// rules to normalise source / text files:
+// remove the raw @sha256 property, only keep @norm/sha256 (the hash of the
+// normalised content) so that build-induced differences (line endings,
+// comments, formatting) do not count as a mismatch.
+
+// --- text file extensions -------------------------------------------------
+// The set of extensions defining "text files" is the single source of truth
+// in src/daleq4py/text_extensions.txt; the same file is read directly by
+// daleq4py.compare_wheels. It is loaded into text_extension_entry, one line
+// per fact, via the <text-extensions-facts> path placeholder substituted by
+// inference.py. The file is documented (it carries '#' comments, blank lines
+// and section headers), so text_extension keeps only genuine extension
+// entries: a non-empty line that starts with a dot. This filtering means no
+// junk patterns reach match(...).
+.comp SrcNormalization {
+    .decl text_extension_entry(ext: symbol)
+    .decl text_extension(id:symbol,ext: symbol)
+    text_extension(cat("R_TEXT_FORMAT_",ext),ext) :- text_extension_entry(ext), strlen(ext) >= 2, substr(ext, 0, 1) = ".".
+}
+
+.init srcnorm = SrcNormalization
+
+.input srcnorm.text_extension_entry(IO=file, filename="<text-extensions-facts>", delimiter="\t")
+
+// --- normalisation rules --------------------------------------------------
+// .py sources: comments / formatting are normalised, so the raw hash is noise.
+idb.remove_content(cat("R_NORMALIZE_PY","[",id1,"]"), name, path, "@sha256") :- edb.content(id1,name, path,"@sha256",_),match(".*\\.py", name).
+
+// other text files (by extension): only line endings are normalised, so the
+// raw hash is likewise dropped in favour of @norm/sha256. cat(".*\\", ext)
+// builds the regex .*\.<ext> (the leading dot of ext supplies the escaped dot).
+idb.remove_content(cat("R_NORMALIZE_TXT","[",id1,",",id2,"]"), name, path, "@sha256") :- edb.content(id1,name, path,"@sha256",_),srcnorm.text_extension(id2,ext),match(cat(".*\\", ext), name).

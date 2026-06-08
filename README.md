@@ -52,9 +52,9 @@ Extracts a content EDB (extensional database) from a single wheel into
     `*.dist-info/`: RFC 822 `Key: value` pairs for `METADATA` / `WHEEL`,
     and one `(packaged-file-path, sha256=…,size)` row per line of `RECORD`.
   - **Synthetic keys** (every member): `@sha256`, `@norm/sha256` (text files
-    only — `.py` via AST round-trip, other text via LF normalisation),
-    `@more/size`, and — when `--src` is supplied — `@src-exists`,
-    `@src-exists-moved`, `@src/sha256`, `@src/norm/sha256`.
+    only — `.py` via AST round-trip, other text via LF normalisation), and
+    — when `--src` is supplied — `@src-exists`, `@src-exists-moved`,
+    `@src/sha256`, `@src/norm/sha256`.
 - `package.tsv` — a two-row package descriptor with `name` (the
   `<package>-<version>` token, e.g. `colorlog-6.7.0`) and `distinfo` (the
   matching `*.dist-info` directory name).

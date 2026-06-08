@@ -8,8 +8,9 @@ module:
 1. concatenates every ``rules/*.souffle`` file (in sorted order) into
    ``<session>/mergedEDBAndRules.souffle``, prefixing each file's content with
    a ``// from <path-relative-to-project-root>`` provenance comment;
-2. replaces the four ``<*-facts>`` placeholders in that merged file with
-   absolute paths to the EDB (input) and IDB (output) fact files;
+2. replaces the ``<*-facts>`` placeholders in that merged file with paths to
+   the EDB (input) and IDB (output) fact files, and to the shared
+   ``text_extensions.txt`` consumed by the text-normalisation rule;
 3. creates the sibling ``<session>/idb/`` directory;
 4. invokes the ``souffle`` binary on the merged file, which writes the inferred IDB
    (as *.tsv file) into the IDB directory.
@@ -45,6 +46,12 @@ _EDB_CONTENT_PLACEHOLDER = "<edb-content-facts>"
 _EDB_PACKAGE_PLACEHOLDER = "<edb-package-facts>"
 _IDB_CONTENT_PLACEHOLDER = "<idb-content-facts>"
 _IDB_PACKAGE_PLACEHOLDER = "<idb-package-facts>"
+_TEXT_EXTENSIONS_PLACEHOLDER = "<text-extensions-facts>"
+
+# The list of text-file extensions consumed by src-normalisation.souffle. This
+# is the same file daleq4py.compare_wheels reads; it is the single source of
+# truth and is loaded directly by souffle via the placeholder above.
+TEXT_EXTENSIONS_FILE = Path(__file__).with_name("text_extensions.txt")
 
 
 class InferenceError(RuntimeError):
@@ -100,6 +107,9 @@ def run_inference(edb_dir: str | Path) -> Path:
             body += "\n"
         merged_chunks.append(f"// from {provenance}\n{body}\n")
 
+    # The text-extensions file lives in the source tree (outside the session),
+    # so it is referenced by its absolute path rather than a session-relative
+    # one.
     merged_path = session_dir / MERGED_FILENAME
     rule_text = (
         "".join(merged_chunks)
@@ -107,6 +117,10 @@ def run_inference(edb_dir: str | Path) -> Path:
         .replace(_EDB_PACKAGE_PLACEHOLDER, _rel(package_edb))
         .replace(_IDB_CONTENT_PLACEHOLDER, _rel(content_idb))
         .replace(_IDB_PACKAGE_PLACEHOLDER, _rel(package_idb))
+        .replace(
+            _TEXT_EXTENSIONS_PLACEHOLDER,
+            TEXT_EXTENSIONS_FILE.resolve().as_posix(),
+        )
     )
     merged_path.write_text(rule_text, encoding="utf-8")
     logger.info(

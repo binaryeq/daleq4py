@@ -14,7 +14,6 @@ from sample_data import (
 )
 
 from daleq4py.extract_edb import (
-    KEY_MORE_SIZE,
     KEY_NORM_SHA256,
     KEY_SHA256,
     KEY_SRC_EXISTS,
@@ -157,17 +156,6 @@ def test_extract_edb_emits_sha256_for_every_member(edb_base_dir):
     for _id, _file, _path, key, value in rows:
         if key == KEY_SHA256:
             assert _SHA256.match(value)
-
-
-def test_extract_edb_emits_more_size_for_every_member(edb_base_dir):
-    edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
-    rows = _read_rows(edb_path)
-    members = {(row[1], row[2]) for row in rows}
-    sized = {(row[1], row[2]) for row in rows if row[3] == KEY_MORE_SIZE}
-    assert members == sized
-    for _id, _file, _path, key, value in rows:
-        if key == KEY_MORE_SIZE:
-            assert value.isdigit()
 
 
 def test_extract_edb_emits_norm_sha256_for_py_sources(edb_base_dir):

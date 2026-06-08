@@ -81,8 +81,11 @@ def test_run_inference_substitutes_all_placeholders(edb_base_dir):
         "<edb-package-facts>",
         "<idb-content-facts>",
         "<idb-package-facts>",
+        "<text-extensions-facts>",
     ):
         assert placeholder not in text, f"{placeholder} was not substituted"
+    # The text-extensions file is referenced by its absolute source-tree path.
+    assert "text_extensions.txt" in text
     # Paths are substituted as session-relative, not absolute.
     assert f"edb/{EDB_FILENAME}" in text
     assert f"idb/{EDB_FILENAME}" in text
@@ -105,6 +108,52 @@ def test_run_inference_lifts_content_with_r_content_prefix(edb_base_dir):
     assert idb_ids <= {f"R_CONTENT[{fid}]" for fid in edb_ids}
     # Sanity: the lift produced something.
     assert idb_ids
+
+
+def _write_edb(edb_dir, content_rows, package_rows):
+    """Write a hand-crafted edb/ directory (content.tsv + package.tsv)."""
+    edb_dir.mkdir(parents=True, exist_ok=True)
+    (edb_dir / EDB_FILENAME).write_text(
+        "".join("\t".join(r) + "\n" for r in content_rows), encoding="utf-8"
+    )
+    (edb_dir / PACKAGE_EDB_FILENAME).write_text(
+        "".join("\t".join(r) + "\n" for r in package_rows), encoding="utf-8"
+    )
+
+
+@requires_souffle
+def test_normalisation_rules_drop_raw_sha_for_py_and_text_files(tmp_path):
+    """R_NORMALIZE_PY / R_NORMALIZE_TXT remove @sha256 for source and text
+    files (by extension), but leave binary members untouched."""
+    edb_dir = tmp_path / "session" / "edb"
+    _write_edb(
+        edb_dir,
+        content_rows=[
+            ("F1", "app.js", "pkg", "@sha256", "aaa"),
+            ("F2", "app.js", "pkg", "@norm/sha256", "nnn"),
+            ("F3", "mod.py", "pkg", "@sha256", "bbb"),
+            ("F4", "logo.png", "pkg", "@sha256", "ccc"),
+            ("F5", "conf.properties", "pkg", "@sha256", "ddd"),
+        ],
+        package_rows=[
+            ("F6", "name", "demo-1.0"),
+            ("F7", "distinfo", "demo-1.0.dist-info"),
+        ],
+    )
+
+    idb_dir = run_inference(edb_dir)
+    rows = _read_rows(idb_dir / EDB_FILENAME)
+    # (file, key) pairs that survived into the IDB.
+    surviving = {(file, key) for _id, file, _path, key, _value in rows}
+
+    # raw @sha256 dropped for the .js and .properties (text) and .py members.
+    assert ("app.js", "@sha256") not in surviving
+    assert ("conf.properties", "@sha256") not in surviving
+    assert ("mod.py", "@sha256") not in surviving
+    # the normalised hash for the text file is kept.
+    assert ("app.js", "@norm/sha256") in surviving
+    # binary member is untouched.
+    assert ("logo.png", "@sha256") in surviving
 
 
 @requires_souffle
