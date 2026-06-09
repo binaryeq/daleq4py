@@ -16,6 +16,18 @@ metanorm.generator(cat("R_GENERATOR","[",id1,",",id2,"]"),generator) :- edb.pack
 // TODO: can refine regex uses to express (semver like) versions, but easy to overfit
 metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_setuptools","[",id,"]"),generator) :- metanorm.generator(id,generator),match("setuptools.*", generator).
 metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_bdist_wheel","[",id,"]"),generator) :- metanorm.generator(id,generator),match("bdist_wheel.*", generator).
+// other common PEP 517 build backends. The prefix patterns are deliberately
+// broad so they also cover family members and the version suffix, e.g.
+// "poetry.*" matches both "poetry" and "poetry-core", "pdm.*" matches
+// "pdm-backend" and "pdm-pep517", "scikit-build.*" matches "scikit-build-core".
+metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_flit","[",id,"]"),generator) :- metanorm.generator(id,generator),match("flit.*", generator).
+metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_poetry","[",id,"]"),generator) :- metanorm.generator(id,generator),match("poetry.*", generator).
+metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_hatchling","[",id,"]"),generator) :- metanorm.generator(id,generator),match("hatchling.*", generator).
+metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_pdm","[",id,"]"),generator) :- metanorm.generator(id,generator),match("pdm.*", generator).
+metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_maturin","[",id,"]"),generator) :- metanorm.generator(id,generator),match("maturin.*", generator).
+metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_scikit_build","[",id,"]"),generator) :- metanorm.generator(id,generator),match("scikit-build.*", generator).
+metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_meson","[",id,"]"),generator) :- metanorm.generator(id,generator),match("meson.*", generator).
+metanorm.whitelisted_generator(cat("R_WHITELISTED_GENERATOR_whey","[",id,"]"),generator) :- metanorm.generator(id,generator),match("whey.*", generator).
 
 // wheel path is needed to remove the key from RECORD
 metanorm.wheel_path(cat("R_WHEEL_PATH","[",id,"]"), cat(distinfo,"/WHEEL")) :- edb.package(id,"distinfo",distinfo).
