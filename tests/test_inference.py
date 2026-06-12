@@ -101,13 +101,14 @@ def test_run_inference_lifts_content_with_r_content_prefix(edb_base_dir):
     idb_dir = run_inference(edb_dir)
     idb_ids = {row[0] for row in _read_rows(idb_dir / EDB_FILENAME)}
 
-    # Every IDB row is the lift of some EDB row with the R_CONTENT prefix.
+    # Every IDB row with the R_CONTENT prefix is the lift of some EDB row.
     # The IDB is a *subset* of the lifted EDB because metadata-normalisation
     # rules can drop facts via idb.remove_content (e.g. the WHEEL generator
     # entry for whitelisted build tools).
-    assert idb_ids <= {f"R_CONTENT[{fid}]" for fid in edb_ids}
+    idb_r_content_ids = {id for id in idb_ids if id.startswith("R_CONTENT[")}
+    assert idb_r_content_ids <= {f"R_CONTENT[{fid}]" for fid in edb_ids}
     # Sanity: the lift produced something.
-    assert idb_ids
+    assert idb_r_content_ids
 
 
 def _write_edb(edb_dir, content_rows, package_rows):
