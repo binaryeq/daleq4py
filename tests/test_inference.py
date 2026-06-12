@@ -5,7 +5,7 @@
 import shutil
 
 import pytest
-from sample_data import COLORLOG_PYPI
+from sample_data import COLORLOG_PYPI, COLORLOG_6_10_1_PYPI
 
 from daleq4py.extract_edb import EDB_FILENAME, PACKAGE_EDB_FILENAME, extract_edb
 from daleq4py.inference import (
@@ -13,7 +13,6 @@ from daleq4py.inference import (
     InferenceError,
     run_inference,
 )
-
 
 requires_souffle = pytest.mark.skipif(
     shutil.which("souffle") is None,
@@ -172,3 +171,37 @@ def test_run_inference_lifts_package_with_r_package_prefix(edb_base_dir):
         for fid, key, value in edb_package_rows
     ]
     assert sorted(idb_package_rows) == sorted(expected)
+
+
+@requires_souffle
+def test_run_inference_moves_license_to_license_subdir(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The license file for colorlog-6.7.0 lives directly in the *.dist-info/ dir
+    assert any(row for row in edb if row[1:3] == ("LICENSE", "colorlog-6.7.0.dist-info"))
+
+    # The license file should appear in the licenses/ subdir in the IDB, and only there
+    assert any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.7.0.dist-info/licenses"))
+    assert not any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.7.0.dist-info"))
+
+
+@requires_souffle
+def test_run_inference_leaves_license_already_in_license_subdir_in_place(edb_base_dir):
+    content_path = extract_edb(COLORLOG_6_10_1_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The license file for colorlog-6.10.1 already lives in *.dist-info/licenses/
+    assert any(row for row in edb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info/licenses"))
+
+    # The license file should still appear in the licenses/ subdir in the IDB, and only there
+    assert any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info/licenses"))
+    assert not any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info"))
