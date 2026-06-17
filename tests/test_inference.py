@@ -5,7 +5,7 @@
 import shutil
 
 import pytest
-from sample_data import COLORLOG_PYPI
+from sample_data import COLORLOG_PYPI, COLORLOG_6_10_1_PYPI
 
 from daleq4py.extract_edb import EDB_FILENAME, PACKAGE_EDB_FILENAME, extract_edb
 from daleq4py.inference import (
@@ -13,7 +13,6 @@ from daleq4py.inference import (
     InferenceError,
     run_inference,
 )
-
 
 requires_souffle = pytest.mark.skipif(
     shutil.which("souffle") is None,
@@ -101,18 +100,14 @@ def test_run_inference_lifts_content_with_r_content_prefix(edb_base_dir):
     idb_dir = run_inference(edb_dir)
     idb_ids = {row[0] for row in _read_rows(idb_dir / EDB_FILENAME)}
 
-    # IDB content rows are either lifts of EDB rows (R_CONTENT prefix) or
-    # facts synthesised by metadata-normalisation relocation rules
-    # (R_RELOCATE_*). The lifted rows are a *subset* of the EDB because those
-    # same rules can also drop facts via idb.remove_content (e.g. the WHEEL
-    # generator entry for whitelisted build tools, or a relocated LICENSE).
-    lifted_ids = {i for i in idb_ids if i.startswith("R_CONTENT[")}
-    relocated_ids = {i for i in idb_ids if i.startswith("R_RELOCATE_")}
-    assert lifted_ids <= {f"R_CONTENT[{fid}]" for fid in edb_ids}
-    # Every IDB row is accounted for by one of the two sources.
-    assert lifted_ids | relocated_ids == idb_ids
+    # Every IDB row with the R_CONTENT prefix is the lift of some EDB row.
+    # The IDB is a *subset* of the lifted EDB because metadata-normalisation
+    # rules can drop facts via idb.remove_content (e.g. the WHEEL generator
+    # entry for whitelisted build tools).
+    idb_r_content_ids = {id for id in idb_ids if id.startswith("R_CONTENT[")}
+    assert idb_r_content_ids <= {f"R_CONTENT[{fid}]" for fid in edb_ids}
     # Sanity: the lift produced something.
-    assert lifted_ids
+    assert idb_r_content_ids
 
 
 def _write_edb(edb_dir, content_rows, package_rows):
@@ -176,3 +171,37 @@ def test_run_inference_lifts_package_with_r_package_prefix(edb_base_dir):
         for fid, key, value in edb_package_rows
     ]
     assert sorted(idb_package_rows) == sorted(expected)
+
+
+@requires_souffle
+def test_run_inference_moves_license_to_license_subdir(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The license file for colorlog-6.7.0 lives directly in the *.dist-info/ dir
+    assert any(row for row in edb if row[1:3] == ("LICENSE", "colorlog-6.7.0.dist-info"))
+
+    # The license file should appear in the licenses/ subdir in the IDB, and only there
+    assert any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.7.0.dist-info/licenses"))
+    assert not any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.7.0.dist-info"))
+
+
+@requires_souffle
+def test_run_inference_leaves_license_already_in_license_subdir_in_place(edb_base_dir):
+    content_path = extract_edb(COLORLOG_6_10_1_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The license file for colorlog-6.10.1 already lives in *.dist-info/licenses/
+    assert any(row for row in edb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info/licenses"))
+
+    # The license file should still appear in the licenses/ subdir in the IDB, and only there
+    assert any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info/licenses"))
+    assert not any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info"))

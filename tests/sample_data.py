@@ -11,10 +11,13 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
 
-# colorlog 6.7.0
+# colorlog 6.7.0 has license at colorlog-6.7.0.dist-info/LICENSE
 COLORLOG_PYPI = DATA_DIR / "colorlog/6.7.0/pypi/colorlog-6.7.0-py2.py3-none-any.whl"
 COLORLOG_MACARON = DATA_DIR / "colorlog/6.7.0/macaron/colorlog-6.7.0-py2.py3-none-any.whl"
 COLORLOG_OSSR = DATA_DIR / "colorlog/6.7.0/ossr/colorlog-6.7.0-py2.py3-none-any.whl"
+
+# colorlog 6.10.1 has license at colorlog-6.10.1.dist-info/licenses/LICENSE
+COLORLOG_6_10_1_PYPI = DATA_DIR / "colorlog/6.10.1/pypi/colorlog-6.10.1-py3-none-any.whl"
 
 # arrow 1.2.1
 ARROW_PYPI = DATA_DIR / "arrow/1.2.1/pypi/arrow-1.2.1-py3-none-any.whl"
@@ -31,6 +34,7 @@ ALL_WHEELS = (
     COLORLOG_PYPI,
     COLORLOG_MACARON,
     COLORLOG_OSSR,
+    COLORLOG_6_10_1_PYPI,
     ARROW_PYPI,
     ARROW_MACARON,
     ARROW_OSSR,
