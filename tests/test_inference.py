@@ -101,13 +101,18 @@ def test_run_inference_lifts_content_with_r_content_prefix(edb_base_dir):
     idb_dir = run_inference(edb_dir)
     idb_ids = {row[0] for row in _read_rows(idb_dir / EDB_FILENAME)}
 
-    # Every IDB row is the lift of some EDB row with the R_CONTENT prefix.
-    # The IDB is a *subset* of the lifted EDB because metadata-normalisation
-    # rules can drop facts via idb.remove_content (e.g. the WHEEL generator
-    # entry for whitelisted build tools).
-    assert idb_ids <= {f"R_CONTENT[{fid}]" for fid in edb_ids}
+    # IDB content rows are either lifts of EDB rows (R_CONTENT prefix) or
+    # facts synthesised by metadata-normalisation relocation rules
+    # (R_RELOCATE_*). The lifted rows are a *subset* of the EDB because those
+    # same rules can also drop facts via idb.remove_content (e.g. the WHEEL
+    # generator entry for whitelisted build tools, or a relocated LICENSE).
+    lifted_ids = {i for i in idb_ids if i.startswith("R_CONTENT[")}
+    relocated_ids = {i for i in idb_ids if i.startswith("R_RELOCATE_")}
+    assert lifted_ids <= {f"R_CONTENT[{fid}]" for fid in edb_ids}
+    # Every IDB row is accounted for by one of the two sources.
+    assert lifted_ids | relocated_ids == idb_ids
     # Sanity: the lift produced something.
-    assert idb_ids
+    assert lifted_ids
 
 
 def _write_edb(edb_dir, content_rows, package_rows):
