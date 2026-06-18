@@ -7,6 +7,11 @@
     .decl whitelisted_generator(id: symbol, name: symbol)
     .decl wheel_path(id: symbol, name: symbol)
     .decl is_in_metadata_folder(id: symbol, file: symbol, path: symbol,key: symbol)
+    .decl metadata_version(id: symbol, version: symbol)
+    .decl has_higher_metadata_version(id: symbol, version: symbol)
+    .decl target_metadata_version(id: symbol, version: symbol)
+    .decl metadata_version_is_less_than(version1: symbol, version2: symbol)
+    .decl non_dynamic_headers(key: symbol)
 }
 
 .init metanorm = MetadataNormalisation
@@ -45,3 +50,50 @@ idb.remove_content(cat("R_RELOCATE_LICENSE_RM","[",id1,"]"), "LICENSE", path, ke
 idb.content(cat("R_RELOCATE_LICENSE_MV","[",id1,",",id2,",",id3,"]"), "LICENSE", cat(distinfo,"/licenses"), key,value) :- edb.package(id1,"distinfo",distinfo), metanorm.is_in_metadata_folder(id2,"LICENSE",path,key), edb.content(id3,"LICENSE",path,key,value).
 idb.remove_content(cat("R_RELOCATE_AUTHORS_RM","[",id1,"]"), "AUTHORS", path, key) :- metanorm.is_in_metadata_folder(id1, "AUTHORS",path,key).
 idb.content(cat("R_RELOCATE_AUTHORS_MV","[",id1,",",id2,",",id3,"]"), "AUTHORS", cat(distinfo,"/licenses"), key,value) :- edb.package(id1,"distinfo",distinfo), metanorm.is_in_metadata_folder(id2,"AUTHORS",path,key), edb.content(id3,"AUTHORS",path,key,value).
+
+// In metadata versions < 2.2, all headers except for Name, Version, and Metadata-Version should be considered
+// dynamic, i.e., as though a "Dynamic: that_header" line appeared. Normalise by "promoting" through every
+// metadata version, adding these headers whenever we promote from 2.1 to 2.2.
+//
+// See https://packaging.python.org/en/latest/specifications/core-metadata/#dynamic-multiple-use
+
+// Constants
+
+// The target version to normalise (promote) every metadata version to. Should be a recent version.
+//TODO: Sanity-check that metanorm.metadata_version() is true for this version.
+metanorm.target_metadata_version("R_TARGET_METADATA_VERSION", "2.5").
+
+// Headers that are NOT implicit-Dynamic before metadata v2.2
+metanorm.non_dynamic_headers("name").
+metanorm.non_dynamic_headers("version").
+metanorm.non_dynamic_headers("metadata_version").
+
+//TODO: Use conversion to an FP numeric type to avoid hardcoding this
+metanorm.metadata_version_is_less_than("1.0", "1.1").
+metanorm.metadata_version_is_less_than("1.1", "1.2").
+metanorm.metadata_version_is_less_than("1.2", "2.1").
+metanorm.metadata_version_is_less_than("2.1", "2.2").
+metanorm.metadata_version_is_less_than("2.2", "2.3").
+metanorm.metadata_version_is_less_than("2.3", "2.4").
+metanorm.metadata_version_is_less_than("2.4", "2.5").
+metanorm.metadata_version_is_less_than(u, v) :- metanorm.metadata_version_is_less_than(u, w), metanorm.metadata_version_is_less_than(w, v).
+
+// Compute the final metadata version that we promote to, along with additional facts implied by each version change
+// Each metadata version can be promoted to the immediate successor version.
+metanorm.metadata_version(cat("R_METADATA_VERSION", "[", id1, ",", id2, "]"), version) :- edb.package(id1, "distinfo", distinfo), edb.content(id2, "METADATA", distinfo, "metadata_version", version).
+metanorm.has_higher_metadata_version(cat("R_HAS_HIGHER_METADATA_VERSION", "[", id1, ",", id2, "]"), version) :- metanorm.metadata_version(id1, version), metanorm.metadata_version(id2, higher_version), metanorm.metadata_version_is_less_than(version, higher_version).
+
+metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_1_1", "[", id1, "]"), "1.1") :- metanorm.metadata_version(id1, "1.0").
+metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_1_2", "[", id1, "]"), "1.2") :- metanorm.metadata_version(id1, "1.1").
+metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_2_1", "[", id1, "]"), "2.1") :- metanorm.metadata_version(id1, "1.2").
+metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_2_2", "[", id1, "]"), "2.2") :- metanorm.metadata_version(id1, "2.1").
+metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_2_3", "[", id1, "]"), "2.3") :- metanorm.metadata_version(id1, "2.2").
+metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_2_4", "[", id1, "]"), "2.4") :- metanorm.metadata_version(id1, "2.3").
+metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_2_5", "[", id1, "]"), "2.5") :- metanorm.metadata_version(id1, "2.4").
+
+// When promoting metadata version 2.1 to 2.2, add in the implied Dynamic: headers for each present and relevant header
+idb.content(cat("R_IMPLICIT_DYNAMIC_HEADER", "[", id1, ",", id2, ",", id3, "]"), "METADATA", path, "dynamic", key) :- edb.content(id1, "METADATA", path, key, _), metanorm.metadata_version(id2, "2.1"), metanorm.metadata_version(id3, "2.2"), !metanorm.non_dynamic_headers(key).
+
+// Finally, add the normalised versions of the raw EDB facts into the IDB
+idb.remove_content(cat("R_PROMOTE_METADATA_VERSION_RM", "[", id1, "]"), "METADATA", path, "metadata_version", initial_version) :- metanorm.has_higher_metadata_version(id1, initial_version).
+idb.content(cat("R_PROMOTE_METADATA_VERSION_MV", "[", id1, "]"), "METADATA", path, "metadata_version", final_version) :- metanorm.metadata_version(id1, final_version), !metanorm.has_higher_metadata_version(id2, final_version).
