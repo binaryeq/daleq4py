@@ -34,6 +34,12 @@ For each wheel member, two kinds of facts are emitted:
   ``.py`` source, any resource) contribute no explicit rows -- their content
   is captured by the synthetic keys below.
 
+The ``@`` prefix is reserved for the synthetic keys below: every key this
+extractor generates starts with ``@``, and any explicit (package-controlled)
+key that also starts with ``@`` is escaped with a leading ``_`` (see
+:func:`_sanitise_explicit_key`) so a crafted wheel cannot forge a fact that
+collides with a genuine synthetic one.
+
 * **Synthetic keys** -- for every member, regardless of location or type:
 
   * ``@sha256`` -- SHA-256 of the raw (uncompressed) archive bytes.
@@ -90,6 +96,15 @@ KEY_NORM_SHA256 = "@norm/sha256"
 # normalised form of each value is additionally emitted.
 REQUIRES_DIST_KEY = "requires_dist"
 KEY_NORM_REQUIRES_DIST = "@norm/requires_dist"
+
+# The synthetic key namespace is reserved: every key this extractor generates
+# begins with ``@``. Explicit (package-controlled) keys must never enter that
+# namespace, otherwise a crafted wheel could forge a fact that collides with a
+# genuine synthetic one. Any explicit key starting with the reserved prefix is
+# escaped by prepending the sentinel below, keeping the invariant "a leading
+# ``@`` means extractor-generated".
+SYNTHETIC_KEY_PREFIX = "@"
+ESCAPED_EXPLICIT_KEY_PREFIX = "_"
 KEY_SRC_EXISTS = "@src-exists"
 KEY_SRC_EXISTS_MOVED = "@src-exists-moved"
 KEY_SRC_SHA256 = "@src/sha256"
@@ -227,6 +242,28 @@ def _load_src_index(
     return src_path, by_path, by_basename
 
 
+def _sanitise_explicit_key(key: str, file_name: str, dir_path: str) -> str:
+    """Keep package-derived keys out of the reserved synthetic namespace.
+
+    Synthetic keys are emitted by this extractor and always start with
+    :data:`SYNTHETIC_KEY_PREFIX` (``@``). A wheel could declare a metadata
+    field or ``RECORD`` entry whose key also starts with ``@`` (e.g.
+    ``@sha256``), producing an explicit fact that collides with a genuine
+    synthetic one. Such a key is escaped by prepending
+    :data:`ESCAPED_EXPLICIT_KEY_PREFIX` so it can never enter the ``@``
+    namespace; the rewrite is logged at WARNING. Keys that don't intrude are
+    returned unchanged (the common case has no cost beyond a prefix check).
+    """
+    if not key.startswith(SYNTHETIC_KEY_PREFIX):
+        return key
+    escaped = f"{ESCAPED_EXPLICIT_KEY_PREFIX}{key}"
+    logger.warning(
+        "escaped reserved explicit key %r -> %r in %s/%s",
+        key, escaped, dir_path, file_name,
+    )
+    return escaped
+
+
 def _rows_for_record(file_name: str, dir_path: str, text: str) -> list[Row]:
     """Turn ``RECORD`` (comma-separated, one line per packaged file) into rows.
 
@@ -239,7 +276,11 @@ def _rows_for_record(file_name: str, dir_path: str, text: str) -> list[Row]:
         if not line.strip():
             continue
         key, _, value = line.partition(",")
-        rows.append((file_name, dir_path, key, value))
+        rows.append((
+            file_name, dir_path,
+            _sanitise_explicit_key(key, file_name, dir_path),
+            value,
+        ))
     return rows
 
 
@@ -264,12 +305,13 @@ def _explicit_rows(file_name: str, dir_path: str, data: bytes) -> list[Row]:
     # raw: recognised core-metadata fields. Values are str, list[str] or
     # (for project_urls) dict[str, str].
     for key, value in raw.items():
+        safe_key = _sanitise_explicit_key(key, file_name, dir_path)
         if isinstance(value, list):
             for item in value:
                 item_str = str(item)
-                rows.append((file_name, dir_path, key, item_str))
+                rows.append((file_name, dir_path, safe_key, item_str))
                 # For dependency specifiers, additionally emit the normalised
-                # value so downstream rules can compare past cosmetic churn.
+                # value under our own (already trusted) synthetic key.
                 if key == REQUIRES_DIST_KEY:
                     rows.append((
                         file_name, dir_path,
@@ -278,15 +320,20 @@ def _explicit_rows(file_name: str, dir_path: str, data: bytes) -> list[Row]:
                     ))
         elif isinstance(value, dict):
             for sub_key, sub_value in value.items():
-                rows.append(
-                    (file_name, dir_path, f"{key}.{sub_key}", str(sub_value))
-                )
+                rows.append((
+                    file_name, dir_path,
+                    _sanitise_explicit_key(
+                        f"{key}.{sub_key}", file_name, dir_path
+                    ),
+                    str(sub_value),
+                ))
         else:
-            rows.append((file_name, dir_path, key, str(value)))
+            rows.append((file_name, dir_path, safe_key, str(value)))
     # unparsed: any remaining fields (e.g. everything in WHEEL). Always list[str].
     for key, values in unparsed.items():
+        safe_key = _sanitise_explicit_key(key, file_name, dir_path)
         for item in values:
-            rows.append((file_name, dir_path, key, item))
+            rows.append((file_name, dir_path, safe_key, item))
     return rows
 
 
