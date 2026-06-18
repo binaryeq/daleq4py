@@ -14,6 +14,7 @@ from sample_data import (
 )
 
 from daleq4py.extract_edb import (
+    KEY_NORM_REQUIRES_DIST,
     KEY_NORM_SHA256,
     KEY_SHA256,
     KEY_SRC_EXISTS,
@@ -22,6 +23,8 @@ from daleq4py.extract_edb import (
     KEY_SRC_SHA256,
     PACKAGE_EDB_FILENAME,
     PROJECT_ROOT,
+    REQUIRES_DIST_KEY,
+    _normalise_requirement,
     extract_edb,
 )
 from daleq4py.wheel import WheelValidationError
@@ -127,6 +130,75 @@ def test_extract_edb_unstructured_files_have_no_explicit_rows(edb_base_dir):
         if row[1] == "LICENSE" and not row[3].startswith("@")
     ]
     assert license_explicit == []
+
+
+# --- Requires-Dist normalisation ---
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        # legacy parenthesised version -> bare specifier
+        ("python-dateutil (>=2.7.0)", "python-dateutil>=2.7.0"),
+        # marker quote style and spacing around ';' normalised
+        ("black ; extra == 'development'", 'black; extra == "development"'),
+        ('typing-extensions ; python_version < "3.8"',
+         'typing-extensions; python_version < "3.8"'),
+        # multiple specifiers are sorted into a canonical order
+        ("requests (>=2.0,<3)", "requests<3,>=2.0"),
+        # distribution name is canonicalised (PEP 503)
+        ("Foo.Bar_Baz>=1.0", "foo-bar-baz>=1.0"),
+        # unparseable values are returned unchanged
+        ("not a valid requirement !!!", "not a valid requirement !!!"),
+    ],
+)
+def test_normalise_requirement(raw, expected):
+    assert _normalise_requirement(raw) == expected
+
+
+def test_extract_edb_pairs_each_requires_dist_with_normalised_fact(edb_base_dir):
+    edb_path = extract_edb(ARROW_PYPI, base_dir=edb_base_dir)
+    rows = _read_rows(edb_path)
+
+    raw_values = [v for _id, f, _p, k, v in rows
+                  if f == "METADATA" and k == REQUIRES_DIST_KEY]
+    norm_values = [v for _id, f, _p, k, v in rows
+                   if f == "METADATA" and k == KEY_NORM_REQUIRES_DIST]
+
+    # arrow declares two dependencies; each yields one raw and one norm fact.
+    assert raw_values == [
+        "python-dateutil (>=2.7.0)",
+        'typing-extensions ; python_version < "3.8"',
+    ]
+    assert norm_values == [
+        "python-dateutil>=2.7.0",
+        'typing-extensions; python_version < "3.8"',
+    ]
+
+
+def test_extract_edb_norm_requires_dist_follows_its_source_row(edb_base_dir):
+    # Each @norm/Requires-Dist row is emitted directly after the requires_dist
+    # row it normalises, so the EDB keeps the pair contiguous.
+    rows = _read_rows(extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir))
+    norm_indices = [
+        i for i, row in enumerate(rows) if row[3] == KEY_NORM_REQUIRES_DIST
+    ]
+    assert norm_indices  # colorlog has Requires-Dist entries
+    for i in norm_indices:
+        assert rows[i - 1][3] == REQUIRES_DIST_KEY
+        # same member (file, path) as the source row
+        assert rows[i][1:3] == rows[i - 1][1:3]
+
+
+def test_extract_edb_only_requires_dist_gets_normalised(edb_base_dir):
+    # Other list-valued metadata (e.g. classifiers) must NOT get a @norm row.
+    rows = _read_rows(extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir))
+    norm_sources = {
+        rows[i - 1][3]
+        for i, row in enumerate(rows)
+        if row[3] == KEY_NORM_REQUIRES_DIST
+    }
+    assert norm_sources == {REQUIRES_DIST_KEY}
 
 
 # --- coverage: walk EVERY member, not just dist-info ---
