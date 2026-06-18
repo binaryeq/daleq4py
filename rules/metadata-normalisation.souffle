@@ -12,6 +12,7 @@
     .decl target_metadata_version(id: symbol, version: symbol)
     .decl metadata_version_is_less_than(version1: symbol, version2: symbol)
     .decl non_dynamic_headers(key: symbol)
+    .decl metadata_key_has_lower_value(id: symbol, key: symbol, value: symbol)
     .decl unique_metadata_key(id: symbol, key: symbol)
 }
 
@@ -93,10 +94,12 @@ metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_2_4", "[", id1, "]"
 metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_2_5", "[", id1, "]"), path, "2.5") :- metanorm.metadata_version(id1, path, "2.4").
 
 // When promoting metadata version 2.1 to 2.2, add in the implied Dynamic: headers for each unique present and relevant header
-//metanorm.unique_metadata_key(cat("R_UNIQUE_METADATA_KEY", "[", id1, "]"), key) :- id1 = min id : edb.content(id, "METADATA", _, key, _).
-metanorm.unique_metadata_key(cat("R_UNIQUE_METADATA_KEY", "[", id1, "]"), key) :- edb.content(_, "METADATA", _, key, _), id1 = min id : edb.content(id, "METADATA", _, key, _).
-//idb.content(cat("R_IMPLICIT_DYNAMIC_HEADER", "[", id1, ",", id2, ",", id3, "]"), "METADATA", path, "dynamic", key) :- edb.content(id1, "METADATA", path, key, _), metanorm.metadata_version(id2, path, "2.1"), metanorm.metadata_version(id3, path, "2.2"), !metanorm.non_dynamic_headers(key).
-idb.content(cat("R_IMPLICIT_DYNAMIC_HEADER", "[", id1, ",", id2, ",", id3, "]"), "METADATA", path, "dynamic", key) :- metanorm.unique_metadata_key(id1, key), metanorm.metadata_version(id2, path, "2.1"), metanorm.metadata_version(id3, path, "2.2"), !metanorm.non_dynamic_headers(key).
+// To construct the provenance (ID) for unique_metadata_key(), we need to *deterministically* choose a witness value.
+// One way is to choose the lexicographically minimum key. Since Souffle 2.5 doesn't support min for symbol types
+// (see https://github.com/souffle-lang/souffle/issues/2589), choose the minimum "the hard way".
+metanorm.metadata_key_has_lower_value(cat("R_METADATA_KEY_HAS_LOWER_VALUE", "[", id1, ",", id2, ",", id3, "]"), key, value) :- edb.package(id1, "distinfo", distinfo), edb.content(id2, "METADATA", distinfo, key, value), edb.content(id3, "METADATA", distinfo, key, lower_value), lower_value < value.
+metanorm.unique_metadata_key(cat("R_UNIQUE_METADATA_KEY", "[", id1, ",", id2, "]"), key) :- edb.package(id1, "distinfo", distinfo), edb.content(id2, "METADATA", distinfo, key, value), !metanorm.metadata_key_has_lower_value(_, key, value).
+idb.content(cat("R_IMPLICIT_DYNAMIC_HEADER", "[", id1, ",", id2, ",", id3, "]"), "METADATA", path, "dynamic", key) :- metanorm.unique_metadata_key(id1, key), metanorm.metadata_version(id2, path, "2.1"), metanorm.metadata_version(id3, path, "2.2"), !contains("@", key), !metanorm.non_dynamic_headers(key).
 
 // Finally, add the normalised versions of the raw EDB facts into the IDB
 idb.remove_content(cat("R_PROMOTE_METADATA_VERSION_RM", "[", id1, ",", id2, "]"), "METADATA", path, "metadata_version") :- metanorm.metadata_version(id1, path, version), metanorm.has_higher_metadata_version(id2, version).
