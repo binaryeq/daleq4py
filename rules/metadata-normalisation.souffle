@@ -64,9 +64,10 @@ idb.content(cat("R_RELOCATE_AUTHORS_MV","[",id1,",",id2,",",id3,"]"), "AUTHORS",
 idb.remove_content(cat("R_RELOCATE_AUTHORS_IN_RECORD_RM","[",id1,",",id2,"]"), "RECORD", distinfo, cat(path, "/AUTHORS")) :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "AUTHORS", path, _).
 idb.content(cat("R_RELOCATE_AUTHORS_IN_RECORD_MV","[",id1,",",id2,",",id3,"]"), "RECORD", distinfo, cat(path, "/licenses/AUTHORS"), value) :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "AUTHORS", path, key), edb.content(id3, "RECORD", distinfo, cat(path, "/AUTHORS"), value).
 
-// In RECORD, ignore the file hash and size of METADATA -- instead we deal with its individual possibly normalised keys
+// In RECORD, ignore the file hash and size of METADATA -- instead we deal with its individual possibly normalised keys.
+// Use the @sha256 keys for METADATA and RECORD just because we know exactly 1 of each exists, resulting in 1 fact.
 idb.remove_content(cat("R_NORMALISE_METADATA_IN_RECORD_RM", "[", id1, "]"), "RECORD", distinfo, cat(distinfo, "/METADATA")) :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "METADATA", path, _).
-idb.content(cat("R_NORMALISE_METADATA_IN_RECORD_MV", "[", id1, ",", id2, ",", id3, "]"), "RECORD", distinfo, cat(distinfo, "/METADATA"), "<IGNORED>") :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "METADATA", path, _), metanorm.is_in_metadata_folder(id3, "RECORD", path, _).
+idb.content(cat("R_NORMALISE_METADATA_IN_RECORD_MV", "[", id1, ",", id2, ",", id3, "]"), "RECORD", distinfo, cat(distinfo, "/METADATA"), "<IGNORED>") :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "METADATA", path, "@sha256"), metanorm.is_in_metadata_folder(id3, "RECORD", path, "@sha256").
 
 // In metadata versions < 2.2, all headers except for Name, Version, and Metadata-Version should be considered
 // dynamic, i.e., as though a "Dynamic: that_header" line appeared. Normalise by "promoting" through every
