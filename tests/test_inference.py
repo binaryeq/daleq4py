@@ -157,6 +157,30 @@ def test_normalisation_rules_drop_raw_sha_for_py_and_text_files(tmp_path):
 
 
 @requires_souffle
+def test_normalisation_rules_keep_normalised_requires_dist_from_metadata(tmp_path):
+    edb_dir = tmp_path / "session" / "edb"
+    _write_edb(
+        edb_dir,
+        content_rows=[
+            ("F1", "METADATA", "demo-1.0.dist-info", "requires_dist", "Foo_Bar >= 1.2.3"),
+            ("F2", "METADATA", "demo-1.0.dist-info", "@norm/requires_dist", "foo-bar>=1.2.3")
+        ],
+        package_rows=[
+            ("F3", "name", "demo-1.0"),
+            ("F4", "distinfo", "demo-1.0.dist-info"),
+        ],
+    )
+
+    idb_dir = run_inference(edb_dir)
+    rows = _read_rows(idb_dir / EDB_FILENAME)
+    # (file, key) pairs that survived into the IDB.
+    surviving = {(file, key) for _id, file, _path, key, _value in rows}
+
+    # Normalised Requires-Dist: value from EDB should survive into IDB
+    assert ("METADATA", "@norm/requires_dist") in surviving
+
+
+@requires_souffle
 def test_run_inference_lifts_package_with_r_package_prefix(edb_base_dir):
     content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
     edb_dir = content_path.parent
