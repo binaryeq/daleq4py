@@ -5,7 +5,7 @@
 import shutil
 
 import pytest
-from sample_data import COLORLOG_PYPI, COLORLOG_6_10_1_PYPI
+from sample_data import COLORLOG_PYPI, COLORLOG_6_10_1_PYPI, COLORLOG_FRESH_PYTHON_M_BUILD
 
 from daleq4py.extract_edb import EDB_FILENAME, PACKAGE_EDB_FILENAME, extract_edb
 from daleq4py.inference import (
@@ -263,3 +263,32 @@ def test_run_inference_synthesises_no_dynamic_headers_for_metadata_version_2_2_a
     original_dynamic_header_keys = {row[4] for row in edb if row[1:4] == ("METADATA", "colorlog-6.10.1.dist-info", "dynamic")}
     final_dynamic_header_keys =    {row[4] for row in idb if row[1:4] == ("METADATA", "colorlog-6.10.1.dist-info", "dynamic")}
     assert original_dynamic_header_keys == final_dynamic_header_keys
+
+
+@requires_souffle
+def test_run_inference_pronounces_two_colorlog_6_7_0_wheels_equivalent_despite_metadata_changes(edb_base_dir):
+    # Wheel for colorpy-6.7.0 from PyPI
+    pypi_content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    pypi_edb_dir = pypi_content_path.parent
+
+    pypi_edb = {row for row in _read_rows(pypi_content_path)}
+    pypi_idb_dir = run_inference(pypi_edb_dir)
+    pypi_idb = {row for row in _read_rows(pypi_idb_dir / EDB_FILENAME)}
+
+    # Wheel for a fresh build of the same package using recent python -m build command
+    fresh_content_path = extract_edb(COLORLOG_FRESH_PYTHON_M_BUILD, base_dir=edb_base_dir)
+    fresh_edb_dir = fresh_content_path.parent
+
+    fresh_edb = {row for row in _read_rows(fresh_content_path)}
+    fresh_idb_dir = run_inference(fresh_edb_dir)
+    fresh_idb = {row for row in _read_rows(fresh_idb_dir / EDB_FILENAME)}
+
+    # Sanity: The original metadata versions should be different
+    pypi_metadata_version, = [row[4] for row in pypi_edb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version")]
+    fresh_metadata_version, = [row[4] for row in fresh_edb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version")]
+    assert pypi_metadata_version != fresh_metadata_version
+
+    # The IDB results should compare equal. Check only the METADATA results and ignore IDs/provenance.
+    pypi_idb_metadata = {row[1:] for row in pypi_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
+    fresh_idb_metadata = {row[1:] for row in fresh_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
+    assert pypi_idb_metadata == fresh_idb_metadata
