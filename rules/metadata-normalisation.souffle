@@ -14,6 +14,7 @@
     .decl non_dynamic_headers(key: symbol)
     .decl metadata_key_has_lower_value(id: symbol, key: symbol, value: symbol)
     .decl unique_metadata_key(id: symbol, key: symbol)
+    .decl original_key_name_for_packaging_name(packaging_key: symbol, original_key: symbol)
 }
 
 .init metanorm = MetadataNormalisation
@@ -80,6 +81,43 @@ metanorm.metadata_version_is_less_than("2.3", "2.4").
 metanorm.metadata_version_is_less_than("2.4", "2.5").
 metanorm.metadata_version_is_less_than(u, v) :- metanorm.metadata_version_is_less_than(u, w), metanorm.metadata_version_is_less_than(w, v).
 
+// Unfortunately the "packaging" Python module introduces subtle METADATA key name differences (hyphens become
+// underscores, some keys are pluralised), meaning we need to undo this transform in order to synthesise
+// Dynamic: headers. The following table is based on _EMAIL_TO_RAW_MAPPING from
+// https://github.com/pypa/packaging/blob/07265129295b4b95b9143b50e3ce4709f31a8c49/src/packaging/metadata.py.
+metanorm.original_key_name_for_packaging_name("author", "author").
+metanorm.original_key_name_for_packaging_name("author_email", "author-email").
+metanorm.original_key_name_for_packaging_name("classifiers", "classifier").
+metanorm.original_key_name_for_packaging_name("description", "description").
+metanorm.original_key_name_for_packaging_name("description_content_type", "description-content-type").
+metanorm.original_key_name_for_packaging_name("download_url", "download-url").
+metanorm.original_key_name_for_packaging_name("dynamic", "dynamic").
+metanorm.original_key_name_for_packaging_name("home_page", "home-page").
+metanorm.original_key_name_for_packaging_name("import_names", "import-name").
+metanorm.original_key_name_for_packaging_name("import_namespaces", "import-namespace").
+metanorm.original_key_name_for_packaging_name("keywords", "keywords").
+metanorm.original_key_name_for_packaging_name("license", "license").
+metanorm.original_key_name_for_packaging_name("license_expression", "license-expression").
+metanorm.original_key_name_for_packaging_name("license_files", "license-file").
+metanorm.original_key_name_for_packaging_name("maintainer", "maintainer").
+metanorm.original_key_name_for_packaging_name("maintainer_email", "maintainer-email").
+metanorm.original_key_name_for_packaging_name("metadata_version", "metadata-version").
+metanorm.original_key_name_for_packaging_name("name", "name").
+metanorm.original_key_name_for_packaging_name("obsoletes", "obsoletes").
+metanorm.original_key_name_for_packaging_name("obsoletes_dist", "obsoletes-dist").
+metanorm.original_key_name_for_packaging_name("platforms", "platform").
+metanorm.original_key_name_for_packaging_name("project_urls", "project-url").
+metanorm.original_key_name_for_packaging_name("provides", "provides").
+metanorm.original_key_name_for_packaging_name("provides_dist", "provides-dist").
+metanorm.original_key_name_for_packaging_name("provides_extra", "provides-extra").
+metanorm.original_key_name_for_packaging_name("requires", "requires").
+metanorm.original_key_name_for_packaging_name("requires_dist", "requires-dist").
+metanorm.original_key_name_for_packaging_name("requires_external", "requires-external").
+metanorm.original_key_name_for_packaging_name("requires_python", "requires-python").
+metanorm.original_key_name_for_packaging_name("summary", "summary").
+metanorm.original_key_name_for_packaging_name("supported_platforms", "supported-platform").
+metanorm.original_key_name_for_packaging_name("version", "version").
+
 // Compute the final metadata version that we promote to, along with additional facts implied by each version change
 // Each metadata version can be promoted to the immediate successor version.
 metanorm.metadata_version(cat("R_METADATA_VERSION", "[", id1, ",", id2, "]"), distinfo, version) :- edb.package(id1, "distinfo", distinfo), edb.content(id2, "METADATA", distinfo, "metadata_version", version).
@@ -99,7 +137,7 @@ metanorm.metadata_version(cat("R_PROMOTE_METADATA_VERSION_TO_2_5", "[", id1, "]"
 // (see https://github.com/souffle-lang/souffle/issues/2589), choose the minimum "the hard way".
 metanorm.metadata_key_has_lower_value(cat("R_METADATA_KEY_HAS_LOWER_VALUE", "[", id1, ",", id2, ",", id3, "]"), key, value) :- edb.package(id1, "distinfo", distinfo), edb.content(id2, "METADATA", distinfo, key, value), edb.content(id3, "METADATA", distinfo, key, lower_value), lower_value < value.
 metanorm.unique_metadata_key(cat("R_UNIQUE_METADATA_KEY", "[", id1, ",", id2, "]"), key) :- edb.package(id1, "distinfo", distinfo), edb.content(id2, "METADATA", distinfo, key, value), !metanorm.metadata_key_has_lower_value(_, key, value).
-idb.content(cat("R_IMPLICIT_DYNAMIC_HEADER", "[", id1, ",", id2, ",", id3, "]"), "METADATA", path, "dynamic", key) :- metanorm.unique_metadata_key(id1, key), metanorm.metadata_version(id2, path, "2.1"), metanorm.metadata_version(id3, path, "2.2"), !contains("@", key), !metanorm.non_dynamic_headers(key).
+idb.content(cat("R_IMPLICIT_DYNAMIC_HEADER", "[", id1, ",", id2, ",", id3, "]"), "METADATA", path, "dynamic", original_key) :- metanorm.unique_metadata_key(id1, packaging_key), metanorm.original_key_name_for_packaging_name(packaging_key, original_key), metanorm.metadata_version(id2, path, "2.1"), metanorm.metadata_version(id3, path, "2.2"), !contains("@", original_key), !metanorm.non_dynamic_headers(packaging_key).
 
 // Finally, add the normalised versions of the raw EDB facts into the IDB
 idb.remove_content(cat("R_PROMOTE_METADATA_VERSION_RM", "[", id1, ",", id2, "]"), "METADATA", path, "metadata_version") :- metanorm.metadata_version(id1, path, version), metanorm.has_higher_metadata_version(id2, version).

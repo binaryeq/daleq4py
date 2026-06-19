@@ -292,3 +292,41 @@ def test_run_inference_pronounces_two_colorlog_6_7_0_wheels_equivalent_despite_m
     pypi_idb_metadata = {row[1:] for row in pypi_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
     fresh_idb_metadata = {row[1:] for row in fresh_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
     assert pypi_idb_metadata == fresh_idb_metadata
+
+
+@requires_souffle
+def test_normalisation_rules_convert_packaging_metadata_keys_back_to_original(tmp_path):
+    # EDB extraction runs packaging.metadata.parse_email(), which uses slightly different names for METADATA keys,
+    # complicating auto-synthesis of Dynamic: header values within Souffle. This test is not exhaustive.
+    edb_dir = tmp_path / "session" / "edb"
+    _write_edb(
+        edb_dir,
+        content_rows=[
+            ("F1", "METADATA", "demo-1.0.dist-info", "platforms", "Windows"),
+            ("F2", "METADATA", "demo-1.0.dist-info", "platforms", "Linux"),     # Test multi-value keys
+            ("F3", "METADATA", "demo-1.0.dist-info", "author_email", "foo@bar.com"),
+            ("F4", "METADATA", "demo-1.0.dist-info", "description", "Cool package"),
+            ("F5", "METADATA", "demo-1.0.dist-info", "metadata_version", "2.1"),    # Trigger Dynamic: synthesis
+        ],
+        package_rows=[
+            ("F6", "name", "demo-1.0"),
+            ("F7", "distinfo", "demo-1.0.dist-info"),
+        ],
+    )
+
+    idb_dir = run_inference(edb_dir)
+    rows = _read_rows(idb_dir / EDB_FILENAME)
+    idb = {(key, value) for _id, _file, _path, key, value in rows}
+
+    expected_idb = {
+        ("platforms", "Windows"),
+        ("platforms", "Linux"),
+        ("author_email", "foo@bar.com"),
+        ("description", "Cool package"),
+        ("metadata_version", "2.5"),  # Normalised from 2.1
+        ("dynamic", "platform"),      # Synthesised; Depluralise "platforms"
+        ("dynamic", "author-email"),  # Synthesised; Convert underscore to hyphen
+        ("dynamic", "description"),   # Synthesised; Unchanged
+    }
+
+    assert idb == expected_idb
