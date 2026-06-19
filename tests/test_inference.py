@@ -366,9 +366,6 @@ def test_run_inference_pronounces_two_colorlog_6_7_0_wheels_equivalent_despite_m
     assert pypi_metadata_version != fresh_metadata_version
 
     # The IDB results should compare equal. Check only the METADATA results and ignore IDs/provenance.
-    #TODO: Currently fails because the original unnormalised requires_dist values are still being copied into
-    # the IDB from the EDB. Since their normalised forms are now available in @norm/requires_dist, we should
-    # get rid of the originals.
     pypi_idb_metadata = {row[1:] for row in pypi_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
     fresh_idb_metadata = {row[1:] for row in fresh_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
     assert pypi_idb_metadata == fresh_idb_metadata
