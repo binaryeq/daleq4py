@@ -180,7 +180,6 @@ def test_normalisation_rules_keep_normalised_requires_dist_from_metadata(tmp_pat
     assert ("METADATA", "@norm/requires_dist") in surviving
 
 
-@pytest.mark.xfail(reason="A direct test of issue #8 (raw Request-Dist values going into IDB)")
 @requires_souffle
 def test_normalisation_rules_drop_unnormalised_requires_dist_from_metadata(tmp_path):
     edb_dir = tmp_path / "session" / "edb"
@@ -343,7 +342,6 @@ def test_run_inference_synthesises_no_dynamic_headers_for_metadata_version_2_2_a
     assert original_dynamic_header_keys == final_dynamic_header_keys
 
 
-@pytest.mark.xfail(reason="Will fail until issue #8 (raw Request-Dist values going into IDB) is fixed")
 @requires_souffle
 def test_run_inference_pronounces_two_colorlog_6_7_0_wheels_equivalent_despite_metadata_changes(edb_base_dir):
     # Wheel for colorpy-6.7.0 from PyPI
