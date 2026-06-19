@@ -241,8 +241,35 @@ def test_run_inference_synthesises_dynamic_headers_for_metadata_versions_below_2
     added_dynamic_header_keys = {row[4] for row in idb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "dynamic")}
     assert added_dynamic_header_keys
 
-    all_header_keys = set(row[3] for row in edb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info") and "@" not in row[3])
-    expected_dynamic_header_keys = all_header_keys - {"name", "version", "metadata_version"}
+    # packaging.meta.parse_email() tweaks METADATA key names so we need to map them back :(
+    # Only bother with the ones actually present in colorlog-6.7.0
+    original_header_key_for_packaging_key_dict = {
+        "name": "name",
+        "version": "version",
+        "summary": "summary",
+        "metadata_version": "metadata-version",
+        "author": "author",
+        "author_email": "author-email",
+        "classifiers": "classifier",
+        "requires_python": "requires-python",
+        "license": "license",
+        "license_files": "license-file",
+        "home_page": "home-page",
+        "requires_dist": "requires-dist",
+        "provides_extra": "provides-extra",
+        "description_content_type": "description-content-type",
+        "description": "description",
+    }
+
+    def original_header_key_for_packaging_key(packaging_key):
+        try:
+            return original_header_key_for_packaging_key_dict[packaging_key]
+        except KeyError:        # Sanity
+            raise AssertionError(f"You need to expand original_header_key_for_packaging_key_dict to handle packaging key '{packaging_key}'")
+
+    all_header_keys = set(original_header_key_for_packaging_key(row[3]) for row in edb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info") and "@" not in row[3])
+
+    expected_dynamic_header_keys = all_header_keys - {"name", "version", "metadata-version"}
     assert added_dynamic_header_keys == expected_dynamic_header_keys
 
 
@@ -289,6 +316,9 @@ def test_run_inference_pronounces_two_colorlog_6_7_0_wheels_equivalent_despite_m
     assert pypi_metadata_version != fresh_metadata_version
 
     # The IDB results should compare equal. Check only the METADATA results and ignore IDs/provenance.
+    #TODO: Currently fails because the original unnormalised requires_dist values are still being copied into
+    # the IDB from the EDB. Since their normalised forms are now available in @norm/requires_dist, we should
+    # get rid of the originals.
     pypi_idb_metadata = {row[1:] for row in pypi_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
     fresh_idb_metadata = {row[1:] for row in fresh_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
     assert pypi_idb_metadata == fresh_idb_metadata
