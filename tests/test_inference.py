@@ -291,6 +291,24 @@ def test_run_inference_leaves_license_already_in_license_subdir_in_place_in_reco
 
 
 @requires_souffle
+def test_run_inference_ignores_metadata_file_hash_and_size_in_record(edb_base_dir):
+    content_path = extract_edb(COLORLOG_6_10_1_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The METADATA file for colorlog-6.10.1 exists
+    assert any(row for row in edb if row[1:3] == ("METADATA", "colorlog-6.10.1.dist-info"))
+
+    # The file size and hash for METADATA in RECORD should be wiped, since we depend on comparing its
+    # individual possibly-normalised headers instead
+    values = [row[4] for row in idb if row[1:4] == ("RECORD", "colorlog-6.10.1.dist-info", "colorlog-6.10.1.dist-info/METADATA")]
+    assert values == ["<IGNORED>"]
+
+
+@requires_souffle
 def test_run_inference_normalises_metadata_version_to_latest(edb_base_dir):
     content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
     edb_dir = content_path.parent
