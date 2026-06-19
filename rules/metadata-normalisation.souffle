@@ -53,11 +53,16 @@ idb.remove_content(cat("R_IGNORE_METADATA_HASHES","[",id1,",",id2,"]"), name, di
 idb.remove_content(cat("R_IGNORE_RAW_REQUIRES_DIST", "[", id1, "]"), "METADATA", distinfo, "requires_dist") :- edb.package(id1, "distinfo", distinfo), edb.content(_, "METADATA", distinfo, "@norm/requires_dist", _).
 
 // normalise location of LICENSE and AUTHORS, always move them into <distinfo>/licenses
-metanorm.is_in_metadata_folder(cat("R_IS_METADATA_FOLDER","[",id1,",",id2,"]"),file,path,key) :- edb.package(id1,"distinfo",distinfo),edb.content(id2,file,path,key,_),match(cat(distinfo,".*"), path).
+metanorm.is_in_metadata_folder(cat("R_IS_METADATA_FOLDER","[",id1,",",id2,"]"),file,path,key) :- edb.package(id1,"distinfo",distinfo),edb.content(id2,file,path,key,_), distinfo = path.
 idb.remove_content(cat("R_RELOCATE_LICENSE_RM","[",id1,"]"), "LICENSE", path, key) :- metanorm.is_in_metadata_folder(id1, "LICENSE",path,key).
 idb.content(cat("R_RELOCATE_LICENSE_MV","[",id1,",",id2,",",id3,"]"), "LICENSE", cat(distinfo,"/licenses"), key,value) :- edb.package(id1,"distinfo",distinfo), metanorm.is_in_metadata_folder(id2,"LICENSE",path,key), edb.content(id3,"LICENSE",path,key,value).
+idb.remove_content(cat("R_RELOCATE_LICENSE_IN_RECORD_RM","[",id1,",",id2,"]"), "RECORD", distinfo, cat(path, "/LICENSE")) :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "LICENSE", path, _).
+idb.content(cat("R_RELOCATE_LICENSE_IN_RECORD_MV","[",id1,",",id2,",",id3,"]"), "RECORD", distinfo, cat(path, "/licenses/LICENSE"), value) :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "LICENSE", path, key), edb.content(id3, "RECORD", distinfo, cat(path, "/LICENSE"), value).
+
 idb.remove_content(cat("R_RELOCATE_AUTHORS_RM","[",id1,"]"), "AUTHORS", path, key) :- metanorm.is_in_metadata_folder(id1, "AUTHORS",path,key).
 idb.content(cat("R_RELOCATE_AUTHORS_MV","[",id1,",",id2,",",id3,"]"), "AUTHORS", cat(distinfo,"/licenses"), key,value) :- edb.package(id1,"distinfo",distinfo), metanorm.is_in_metadata_folder(id2,"AUTHORS",path,key), edb.content(id3,"AUTHORS",path,key,value).
+idb.remove_content(cat("R_RELOCATE_AUTHORS_IN_RECORD_RM","[",id1,",",id2,"]"), "RECORD", distinfo, cat(path, "/AUTHORS")) :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "AUTHORS", path, _).
+idb.content(cat("R_RELOCATE_AUTHORS_IN_RECORD_MV","[",id1,",",id2,",",id3,"]"), "RECORD", distinfo, cat(path, "/licenses/AUTHORS"), value) :- edb.package(id1, "distinfo", distinfo), metanorm.is_in_metadata_folder(id2, "AUTHORS", path, key), edb.content(id3, "RECORD", distinfo, cat(path, "/AUTHORS"), value).
 
 // In metadata versions < 2.2, all headers except for Name, Version, and Metadata-Version should be considered
 // dynamic, i.e., as though a "Dynamic: that_header" line appeared. Normalise by "promoting" through every
