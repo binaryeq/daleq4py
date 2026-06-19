@@ -256,6 +256,41 @@ def test_run_inference_leaves_license_already_in_license_subdir_in_place(edb_bas
 
 
 @requires_souffle
+def test_run_inference_moves_license_to_license_subdir_in_record(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The license file for colorlog-6.7.0 lives directly in the *.dist-info/ dir
+    assert any(row for row in edb if row[1:3] == ("LICENSE", "colorlog-6.7.0.dist-info"))
+
+    # The license file should appear in the licenses/ subdir in the IDB for RECORD, and only there
+    assert any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.7.0.dist-info", "colorlog-6.7.0.dist-info/licenses/LICENSE"))
+    assert not any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.7.0.dist-info", "colorlog-6.7.0.dist-info/LICENSE"))
+
+
+@requires_souffle
+def test_run_inference_leaves_license_already_in_license_subdir_in_place_in_record(edb_base_dir):
+    content_path = extract_edb(COLORLOG_6_10_1_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The license file for colorlog-6.10.1 already lives in *.dist-info/licenses/
+    assert any(row for row in edb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info/licenses"))
+
+    # The license file should still appear in the licenses/ subdir in the IDB, and only there
+    assert any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.10.1.dist-info", "colorlog-6.10.1.dist-info/licenses/LICENSE"))
+    assert not any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.10.1.dist-info", "colorlog-6.10.1.dist-info/LICENSE"))
+    assert not any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.10.1.dist-info", "colorlog-6.10.1.dist-info/licenses/licenses/LICENSE"))
+
+
+@requires_souffle
 def test_run_inference_normalises_metadata_version_to_latest(edb_base_dir):
     content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
     edb_dir = content_path.parent
