@@ -70,6 +70,7 @@ metanorm.target_metadata_version("R_TARGET_METADATA_VERSION", "2.5").
 metanorm.non_dynamic_headers("name").
 metanorm.non_dynamic_headers("version").
 metanorm.non_dynamic_headers("metadata_version").
+metanorm.non_dynamic_headers("requires_dist").	// Not listed as non-dynamic in the spec, but at least setuptools 80.9.0 treats it this way
 
 //TODO: Use conversion to an FP numeric type to avoid hardcoding this
 metanorm.metadata_version_is_less_than("1.0", "1.1").

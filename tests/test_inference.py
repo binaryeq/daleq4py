@@ -318,7 +318,9 @@ def test_run_inference_synthesises_dynamic_headers_for_metadata_versions_below_2
 
     all_header_keys = set(original_header_key_for_packaging_key(row[3]) for row in edb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info") and "@" not in row[3])
 
-    expected_dynamic_header_keys = all_header_keys - {"name", "version", "metadata-version"}
+    # Although Requires-Dist is not listed as a non-dynamic header in the spec, in practice modern build
+    # backends do not include it among the values for Dynamic.
+    expected_dynamic_header_keys = all_header_keys - {"name", "version", "metadata-version", "requires-dist"}
     assert added_dynamic_header_keys == expected_dynamic_header_keys
 
 
