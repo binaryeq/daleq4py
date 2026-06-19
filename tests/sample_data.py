@@ -15,6 +15,9 @@ DATA_DIR = Path(__file__).parent / "data"
 COLORLOG_PYPI = DATA_DIR / "colorlog/6.7.0/pypi/colorlog-6.7.0-py2.py3-none-any.whl"
 COLORLOG_MACARON = DATA_DIR / "colorlog/6.7.0/macaron/colorlog-6.7.0-py2.py3-none-any.whl"
 COLORLOG_OSSR = DATA_DIR / "colorlog/6.7.0/ossr/colorlog-6.7.0-py2.py3-none-any.whl"
+# A fresh build of colorlog 6.7.0 has license at colorlog-6.7.0.dist-info/licenses/LICENSE and
+# is built with Metadata-Version 2.4 instead of 2.1
+COLORLOG_FRESH_PYTHON_M_BUILD = DATA_DIR / "colorlog/6.7.0/fresh_python_-m_build/colorlog-6.7.0-py2.py3-none-any.whl"
 
 # colorlog 6.10.1 has license at colorlog-6.10.1.dist-info/licenses/LICENSE
 COLORLOG_6_10_1_PYPI = DATA_DIR / "colorlog/6.10.1/pypi/colorlog-6.10.1-py3-none-any.whl"
@@ -34,6 +37,7 @@ ALL_WHEELS = (
     COLORLOG_PYPI,
     COLORLOG_MACARON,
     COLORLOG_OSSR,
+    COLORLOG_FRESH_PYTHON_M_BUILD,
     COLORLOG_6_10_1_PYPI,
     ARROW_PYPI,
     ARROW_MACARON,

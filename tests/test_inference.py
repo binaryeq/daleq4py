@@ -205,3 +205,61 @@ def test_run_inference_leaves_license_already_in_license_subdir_in_place(edb_bas
     # The license file should still appear in the licenses/ subdir in the IDB, and only there
     assert any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info/licenses"))
     assert not any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info"))
+
+
+@requires_souffle
+def test_run_inference_normalises_metadata_version_to_latest(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The metadata version license file for colorlog-6.7.0 is 2.1
+    assert any(row for row in edb if row[1:] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version", "2.1"))
+
+    # The IDB should contain the final target metadata version only (currently 2.5)
+    assert any(row for row in idb if row[1:] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version", "2.5"))
+    assert not any(row for row in idb if row[1:] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version", "2.1"))
+
+
+@requires_souffle
+def test_run_inference_synthesises_dynamic_headers_for_metadata_versions_below_2_2(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The metadata version license file for colorlog-6.7.0 is 2.1 and there are no Dynamic: headers
+    assert any(row for row in edb if row[1:] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version", "2.1"))
+    assert not any(row for row in edb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "dynamic"))
+
+    # The IDB should contain a synthesised "Dynamic:" header for each unique header key except for Name, Version and Metadata-Version
+    added_dynamic_header_keys = {row[4] for row in idb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "dynamic")}
+    assert added_dynamic_header_keys
+
+    all_header_keys = set(row[3] for row in edb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info") and "@" not in row[3])
+    expected_dynamic_header_keys = all_header_keys - {"name", "version", "metadata_version"}
+    assert added_dynamic_header_keys == expected_dynamic_header_keys
+
+
+@requires_souffle
+def test_run_inference_synthesises_no_dynamic_headers_for_metadata_version_2_2_and_above(edb_base_dir):
+    content_path = extract_edb(COLORLOG_6_10_1_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The metadata version license file for colorlog-6.10.1 is 2.4 and there are some Dynamic: headers
+    assert any(row for row in edb if row[1:] == ("METADATA", "colorlog-6.10.1.dist-info", "metadata_version", "2.4"))
+    assert any(row for row in edb if row[1:4] == ("METADATA", "colorlog-6.10.1.dist-info", "dynamic"))
+
+    # The IDB should not contain any additional "Dynamic:" headers
+    original_dynamic_header_keys = {row[4] for row in edb if row[1:4] == ("METADATA", "colorlog-6.10.1.dist-info", "dynamic")}
+    final_dynamic_header_keys =    {row[4] for row in idb if row[1:4] == ("METADATA", "colorlog-6.10.1.dist-info", "dynamic")}
+    assert original_dynamic_header_keys == final_dynamic_header_keys
