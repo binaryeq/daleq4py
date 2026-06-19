@@ -365,10 +365,10 @@ def test_run_inference_pronounces_two_colorlog_6_7_0_wheels_equivalent_despite_m
     fresh_metadata_version, = [row[4] for row in fresh_edb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version")]
     assert pypi_metadata_version != fresh_metadata_version
 
-    # The IDB results should compare equal. Check only the METADATA results and ignore IDs/provenance.
-    pypi_idb_metadata = {row[1:] for row in pypi_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
-    fresh_idb_metadata = {row[1:] for row in fresh_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
-    assert pypi_idb_metadata == fresh_idb_metadata
+    # The IDB results should compare equal. Ignore IDs/provenance.
+    pypi_idb_no_id = {row[1:] for row in pypi_idb}
+    fresh_idb_no_id = {row[1:] for row in fresh_idb}
+    assert pypi_idb_no_id == fresh_idb_no_id
 
 
 @requires_souffle
