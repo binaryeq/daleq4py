@@ -256,6 +256,59 @@ def test_run_inference_leaves_license_already_in_license_subdir_in_place(edb_bas
 
 
 @requires_souffle
+def test_run_inference_moves_license_to_license_subdir_in_record(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The license file for colorlog-6.7.0 lives directly in the *.dist-info/ dir
+    assert any(row for row in edb if row[1:3] == ("LICENSE", "colorlog-6.7.0.dist-info"))
+
+    # The license file should appear in the licenses/ subdir in the IDB for RECORD, and only there
+    assert any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.7.0.dist-info", "colorlog-6.7.0.dist-info/licenses/LICENSE"))
+    assert not any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.7.0.dist-info", "colorlog-6.7.0.dist-info/LICENSE"))
+
+
+@requires_souffle
+def test_run_inference_leaves_license_already_in_license_subdir_in_place_in_record(edb_base_dir):
+    content_path = extract_edb(COLORLOG_6_10_1_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The license file for colorlog-6.10.1 already lives in *.dist-info/licenses/
+    assert any(row for row in edb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info/licenses"))
+
+    # The license file should still appear in the licenses/ subdir in the IDB, and only there
+    assert any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.10.1.dist-info", "colorlog-6.10.1.dist-info/licenses/LICENSE"))
+    assert not any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.10.1.dist-info", "colorlog-6.10.1.dist-info/LICENSE"))
+    assert not any(row for row in idb if row[1:4] == ("RECORD", "colorlog-6.10.1.dist-info", "colorlog-6.10.1.dist-info/licenses/licenses/LICENSE"))
+
+
+@requires_souffle
+def test_run_inference_ignores_metadata_file_hash_and_size_in_record(edb_base_dir):
+    content_path = extract_edb(COLORLOG_6_10_1_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The METADATA file for colorlog-6.10.1 exists
+    assert any(row for row in edb if row[1:3] == ("METADATA", "colorlog-6.10.1.dist-info"))
+
+    # The file size and hash for METADATA in RECORD should be wiped, since we depend on comparing its
+    # individual possibly-normalised headers instead
+    values = [row[4] for row in idb if row[1:4] == ("RECORD", "colorlog-6.10.1.dist-info", "colorlog-6.10.1.dist-info/METADATA")]
+    assert values == ["<IGNORED>"]
+
+
+@requires_souffle
 def test_run_inference_normalises_metadata_version_to_latest(edb_base_dir):
     content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
     edb_dir = content_path.parent
@@ -365,10 +418,10 @@ def test_run_inference_pronounces_two_colorlog_6_7_0_wheels_equivalent_despite_m
     fresh_metadata_version, = [row[4] for row in fresh_edb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version")]
     assert pypi_metadata_version != fresh_metadata_version
 
-    # The IDB results should compare equal. Check only the METADATA results and ignore IDs/provenance.
-    pypi_idb_metadata = {row[1:] for row in pypi_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
-    fresh_idb_metadata = {row[1:] for row in fresh_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
-    assert pypi_idb_metadata == fresh_idb_metadata
+    # The IDB results should compare equal. Ignore IDs/provenance.
+    pypi_idb_no_id = {row[1:] for row in pypi_idb}
+    fresh_idb_no_id = {row[1:] for row in fresh_idb}
+    assert pypi_idb_no_id == fresh_idb_no_id
 
 
 @requires_souffle
