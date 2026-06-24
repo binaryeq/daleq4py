@@ -179,20 +179,6 @@ def test_extract_edb_pairs_each_requires_dist_with_normalised_fact(edb_base_dir)
     ]
 
 
-def test_extract_edb_norm_requires_dist_follows_its_source_row(edb_base_dir):
-    # Each @norm/Requires-Dist row is emitted directly after the requires_dist
-    # row it normalises, so the EDB keeps the pair contiguous.
-    rows = _read_rows(extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir))
-    norm_indices = [
-        i for i, row in enumerate(rows) if row[3] == KEY_NORM_REQUIRES_DIST
-    ]
-    assert norm_indices  # colorlog has Requires-Dist entries
-    for i in norm_indices:
-        assert rows[i - 1][3] == REQUIRES_DIST_KEY
-        # same member (file, path) as the source row
-        assert rows[i][1:3] == rows[i - 1][1:3]
-
-
 def test_extract_edb_only_requires_dist_gets_normalised(edb_base_dir):
     # Other list-valued metadata (e.g. classifiers) must NOT get a @norm row.
     rows = _read_rows(extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir))

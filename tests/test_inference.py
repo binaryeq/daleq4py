@@ -5,7 +5,7 @@
 import shutil
 
 import pytest
-from sample_data import COLORLOG_PYPI, COLORLOG_6_10_1_PYPI
+from sample_data import COLORLOG_PYPI, COLORLOG_6_10_1_PYPI, COLORLOG_FRESH_PYTHON_M_BUILD
 
 from daleq4py.extract_edb import EDB_FILENAME, PACKAGE_EDB_FILENAME, extract_edb
 from daleq4py.inference import (
@@ -181,6 +181,30 @@ def test_normalisation_rules_keep_normalised_requires_dist_from_metadata(tmp_pat
 
 
 @requires_souffle
+def test_normalisation_rules_drop_unnormalised_requires_dist_from_metadata(tmp_path):
+    edb_dir = tmp_path / "session" / "edb"
+    _write_edb(
+        edb_dir,
+        content_rows=[
+            ("F1", "METADATA", "demo-1.0.dist-info", "requires_dist", "Foo_Bar >= 1.2.3"),
+            ("F2", "METADATA", "demo-1.0.dist-info", "@norm/requires_dist", "foo-bar>=1.2.3")
+        ],
+        package_rows=[
+            ("F3", "name", "demo-1.0"),
+            ("F4", "distinfo", "demo-1.0.dist-info"),
+        ],
+    )
+
+    idb_dir = run_inference(edb_dir)
+    rows = _read_rows(idb_dir / EDB_FILENAME)
+    # (file, key) pairs that survived into the IDB.
+    surviving = {(file, key) for _id, file, _path, key, _value in rows}
+
+    # The original unnormalised Requires-Dist: value from EDB should be excluded from the IDB
+    assert ("METADATA", "requires_dist") not in surviving
+
+
+@requires_souffle
 def test_run_inference_lifts_package_with_r_package_prefix(edb_base_dir):
     content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
     edb_dir = content_path.parent
@@ -229,3 +253,157 @@ def test_run_inference_leaves_license_already_in_license_subdir_in_place(edb_bas
     # The license file should still appear in the licenses/ subdir in the IDB, and only there
     assert any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info/licenses"))
     assert not any(row for row in idb if row[1:3] == ("LICENSE", "colorlog-6.10.1.dist-info"))
+
+
+@requires_souffle
+def test_run_inference_normalises_metadata_version_to_latest(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The metadata version license file for colorlog-6.7.0 is 2.1
+    assert any(row for row in edb if row[1:] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version", "2.1"))
+
+    # The IDB should contain the final target metadata version only (currently 2.5)
+    assert any(row for row in idb if row[1:] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version", "2.5"))
+    assert not any(row for row in idb if row[1:] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version", "2.1"))
+
+
+@requires_souffle
+def test_run_inference_synthesises_dynamic_headers_for_metadata_versions_below_2_2(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The metadata version license file for colorlog-6.7.0 is 2.1 and there are no Dynamic: headers
+    assert any(row for row in edb if row[1:] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version", "2.1"))
+    assert not any(row for row in edb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "dynamic"))
+
+    # The IDB should contain a synthesised "Dynamic:" header for each unique header key except for Name, Version and Metadata-Version
+    added_dynamic_header_keys = {row[4] for row in idb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "dynamic")}
+    assert added_dynamic_header_keys
+
+    # packaging.meta.parse_email() tweaks METADATA key names so we need to map them back :(
+    # Only bother with the ones actually present in colorlog-6.7.0
+    original_header_key_for_packaging_key_dict = {
+        "name": "name",
+        "version": "version",
+        "summary": "summary",
+        "metadata_version": "metadata-version",
+        "author": "author",
+        "author_email": "author-email",
+        "classifiers": "classifier",
+        "requires_python": "requires-python",
+        "license": "license",
+        "license_files": "license-file",
+        "home_page": "home-page",
+        "requires_dist": "requires-dist",
+        "provides_extra": "provides-extra",
+        "description_content_type": "description-content-type",
+        "description": "description",
+    }
+
+    def original_header_key_for_packaging_key(packaging_key):
+        try:
+            return original_header_key_for_packaging_key_dict[packaging_key]
+        except KeyError:        # Sanity
+            raise AssertionError(f"You need to expand original_header_key_for_packaging_key_dict to handle packaging key '{packaging_key}'")
+
+    all_header_keys = set(original_header_key_for_packaging_key(row[3]) for row in edb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info") and "@" not in row[3])
+
+    # Although Requires-Dist is not listed as a non-dynamic header in the spec, in practice modern build
+    # backends do not include it among the values for Dynamic.
+    expected_dynamic_header_keys = all_header_keys - {"name", "version", "metadata-version", "requires-dist"}
+    assert added_dynamic_header_keys == expected_dynamic_header_keys
+
+
+@requires_souffle
+def test_run_inference_synthesises_no_dynamic_headers_for_metadata_version_2_2_and_above(edb_base_dir):
+    content_path = extract_edb(COLORLOG_6_10_1_PYPI, base_dir=edb_base_dir)
+    edb_dir = content_path.parent
+
+    edb = {row for row in _read_rows(content_path)}
+    idb_dir = run_inference(edb_dir)
+    idb = {row for row in _read_rows(idb_dir / EDB_FILENAME)}
+
+    # Sanity: The metadata version license file for colorlog-6.10.1 is 2.4 and there are some Dynamic: headers
+    assert any(row for row in edb if row[1:] == ("METADATA", "colorlog-6.10.1.dist-info", "metadata_version", "2.4"))
+    assert any(row for row in edb if row[1:4] == ("METADATA", "colorlog-6.10.1.dist-info", "dynamic"))
+
+    # The IDB should not contain any additional "Dynamic:" headers
+    original_dynamic_header_keys = {row[4] for row in edb if row[1:4] == ("METADATA", "colorlog-6.10.1.dist-info", "dynamic")}
+    final_dynamic_header_keys =    {row[4] for row in idb if row[1:4] == ("METADATA", "colorlog-6.10.1.dist-info", "dynamic")}
+    assert original_dynamic_header_keys == final_dynamic_header_keys
+
+
+@requires_souffle
+def test_run_inference_pronounces_two_colorlog_6_7_0_wheels_equivalent_despite_metadata_changes(edb_base_dir):
+    # Wheel for colorpy-6.7.0 from PyPI
+    pypi_content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    pypi_edb_dir = pypi_content_path.parent
+
+    pypi_edb = {row for row in _read_rows(pypi_content_path)}
+    pypi_idb_dir = run_inference(pypi_edb_dir)
+    pypi_idb = {row for row in _read_rows(pypi_idb_dir / EDB_FILENAME)}
+
+    # Wheel for a fresh build of the same package using recent python -m build command
+    fresh_content_path = extract_edb(COLORLOG_FRESH_PYTHON_M_BUILD, base_dir=edb_base_dir)
+    fresh_edb_dir = fresh_content_path.parent
+
+    fresh_edb = {row for row in _read_rows(fresh_content_path)}
+    fresh_idb_dir = run_inference(fresh_edb_dir)
+    fresh_idb = {row for row in _read_rows(fresh_idb_dir / EDB_FILENAME)}
+
+    # Sanity: The original metadata versions should be different
+    pypi_metadata_version, = [row[4] for row in pypi_edb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version")]
+    fresh_metadata_version, = [row[4] for row in fresh_edb if row[1:4] == ("METADATA", "colorlog-6.7.0.dist-info", "metadata_version")]
+    assert pypi_metadata_version != fresh_metadata_version
+
+    # The IDB results should compare equal. Check only the METADATA results and ignore IDs/provenance.
+    pypi_idb_metadata = {row[1:] for row in pypi_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
+    fresh_idb_metadata = {row[1:] for row in fresh_idb if row[1:3] == ("METADATA", "colorlog-6.7.0.dist-info")}
+    assert pypi_idb_metadata == fresh_idb_metadata
+
+
+@requires_souffle
+def test_normalisation_rules_convert_packaging_metadata_keys_back_to_original(tmp_path):
+    # EDB extraction runs packaging.metadata.parse_email(), which uses slightly different names for METADATA keys,
+    # complicating auto-synthesis of Dynamic: header values within Souffle. This test is not exhaustive.
+    edb_dir = tmp_path / "session" / "edb"
+    _write_edb(
+        edb_dir,
+        content_rows=[
+            ("F1", "METADATA", "demo-1.0.dist-info", "platforms", "Windows"),
+            ("F2", "METADATA", "demo-1.0.dist-info", "platforms", "Linux"),     # Test multi-value keys
+            ("F3", "METADATA", "demo-1.0.dist-info", "author_email", "foo@bar.com"),
+            ("F4", "METADATA", "demo-1.0.dist-info", "description", "Cool package"),
+            ("F5", "METADATA", "demo-1.0.dist-info", "metadata_version", "2.1"),    # Trigger Dynamic: synthesis
+        ],
+        package_rows=[
+            ("F6", "name", "demo-1.0"),
+            ("F7", "distinfo", "demo-1.0.dist-info"),
+        ],
+    )
+
+    idb_dir = run_inference(edb_dir)
+    rows = _read_rows(idb_dir / EDB_FILENAME)
+    idb = {(key, value) for _id, _file, _path, key, value in rows}
+
+    expected_idb = {
+        ("platforms", "Windows"),
+        ("platforms", "Linux"),
+        ("author_email", "foo@bar.com"),
+        ("description", "Cool package"),
+        ("metadata_version", "2.5"),  # Normalised from 2.1
+        ("dynamic", "platform"),      # Synthesised; Depluralise "platforms"
+        ("dynamic", "author-email"),  # Synthesised; Convert underscore to hyphen
+        ("dynamic", "description"),   # Synthesised; Unchanged
+    }
+
+    assert idb == expected_idb
