@@ -28,7 +28,15 @@
 // .py sources: comments / formatting are normalised, so the raw hash is noise.
 idb.remove_content(cat("R_NORMALIZE_PY","[",id1,"]"), name, path, "@sha256") :- edb.content(id1,name, path,"@sha256",_),match(".*\\.py", name).
 
+// .py sources: comments / formatting are normalised, so the raw hash is noise.
+// this is sha that compares .py files with the original sources
+// note that @src/norm/sha256 is retained
+idb.remove_content(cat("R_NORMALIZE_SRC_PY","[",id1,"]"), name, path, "@src/sha256") :- edb.content(id1,name, path,"@src/sha256",_),match(".*\\.py", name).
+
+
 // other text files (by extension): only line endings are normalised, so the
 // raw hash is likewise dropped in favour of @norm/sha256. cat(".*\\", ext)
 // builds the regex .*\.<ext> (the leading dot of ext supplies the escaped dot).
 idb.remove_content(cat("R_NORMALIZE_TXT","[",id1,",",id2,"]"), name, path, "@sha256") :- edb.content(id1,name, path,"@sha256",_),srcnorm.text_extension(id2,ext),match(cat(".*\\", ext), name).
+
+idb.remove_content(cat("R_NORMALIZE_SRC_TXT","[",id1,",",id2,"]"), name, path, "@src/sha256") :- edb.content(id1,name, path,"@src/sha256",_),srcnorm.text_extension(id2,ext),match(cat(".*\\", ext), name).
