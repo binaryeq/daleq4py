@@ -14,6 +14,8 @@ from sample_data import (
     COLORLOG_MACARON,
     COLORLOG_OSSR,
     COLORLOG_PYPI,
+    QDARKSTYLE_PYPI,
+    ALL_WHEELS,
 )
 
 from daleq4py.extract_edb import (
@@ -91,8 +93,13 @@ def test_extract_edb_rejects_invalid_wheel(edb_base_dir, tmp_path):
 # --- explicit keys (recognised metadata files) ---
 
 
-def test_extract_edb_captures_key_value_metadata(edb_base_dir):
-    edb_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+@pytest.mark.parametrize(
+    "wheel",
+    ALL_WHEELS,
+    ids=lambda v: v if isinstance(v, str) else v.name,
+)
+def test_extract_edb_captures_key_value_metadata(wheel, edb_base_dir):
+    edb_path = extract_edb(wheel, base_dir=edb_base_dir)
     rows = _read_rows(edb_path)
     wheel_keys = {key for _id, file, _path, key, _v in rows if file == "WHEEL"}
     assert "wheel-version" in wheel_keys
@@ -422,3 +429,18 @@ def test_extract_edb_package_name_matches_dist_info(
     assert by_key["name"] == expected_name
     assert by_key["distinfo"] == f"{expected_name}.dist-info"
     assert all(_FACT_ID.match(row[0]) for row in rows)
+
+
+def test_extract_edb_outputs_description_facts_only_for_metadata(
+    edb_base_dir
+):
+    edb_path = extract_edb(QDARKSTYLE_PYPI, base_dir=edb_base_dir)
+    rows = _read_rows(edb_path)
+
+    # Sanity check: We get at least one description
+    description_rows = [row for row in rows if row[3] == "description"]
+    assert description_rows
+
+    # The only description facts are for *.dist-info/METADATA
+    description_rows_in_metadata = [row for row in description_rows if row[1] == "METADATA"]
+    assert description_rows_in_metadata == description_rows
