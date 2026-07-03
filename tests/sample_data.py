@@ -32,6 +32,9 @@ AUTOPEP8_PYPI = DATA_DIR / "autopep8/2.1.2/pypi/autopep8-2.1.2-py2.py3-none-any.
 AUTOPEP8_MACARON = DATA_DIR / "autopep8/2.1.2/macaron/autopep8-2.1.2-py2.py3-none-any.whl"
 AUTOPEP8_OSSR = DATA_DIR / "autopep8/2.1.2/ossr/autopep8-2.1.2-py2.py3-none-any.whl"
 
+# qdarkstyle 3.1 has Python files that look slightly like RFC-822-style headers
+QDARKSTYLE_PYPI = DATA_DIR / "qdarkstyle/3.1/pypi/QDarkStyle-3.1-py2.py3-none-any.whl"
+
 # Every sample wheel, for tests that should hold for all of them.
 ALL_WHEELS = (
     COLORLOG_PYPI,
@@ -45,4 +48,5 @@ ALL_WHEELS = (
     AUTOPEP8_PYPI,
     AUTOPEP8_MACARON,
     AUTOPEP8_OSSR,
+    QDARKSTYLE_PYPI,
 )

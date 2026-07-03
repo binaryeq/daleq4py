@@ -149,15 +149,6 @@ def _escape(field: str) -> str:
     )
 
 
-def _looks_like_headers(text: str) -> bool:
-    """True if ``text`` opens with an RFC 822 style ``Key: value`` block."""
-    for line in text.splitlines():
-        if not line.strip():
-            continue  # tolerate leading blank lines
-        return bool(_HEADER_LINE.match(line))  # first real line decides
-    return False
-
-
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -297,7 +288,7 @@ def _explicit_rows(file_name: str, dir_path: str, data: bytes) -> list[Row]:
         )
 
     text = data.decode("utf-8", errors="replace")
-    if not _looks_like_headers(text):
+    if not (dir_path.endswith(".dist-info") and file_name in ("METADATA", "WHEEL")):
         return []
 
     raw, unparsed = parse_email(text)
