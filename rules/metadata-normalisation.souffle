@@ -155,6 +155,10 @@ metanorm.metadata_key_has_lower_value(cat("R_METADATA_KEY_HAS_LOWER_VALUE", "[",
 metanorm.unique_metadata_key(cat("R_UNIQUE_METADATA_KEY", "[", id1, ",", id2, "]"), key) :- edb.package(id1, "distinfo", distinfo), edb.content(id2, "METADATA", distinfo, key, value), !metanorm.metadata_key_has_lower_value(_, key, value).
 idb.content(cat("R_IMPLICIT_DYNAMIC_HEADER", "[", id1, ",", id2, ",", id3, "]"), "METADATA", path, "dynamic", original_key) :- metanorm.unique_metadata_key(id1, packaging_key), metanorm.original_key_name_for_packaging_name(packaging_key, original_key), metanorm.metadata_version(id2, path, "2.1"), metanorm.metadata_version(id3, path, "2.2"), !contains("@", original_key), !metanorm.non_dynamic_headers(packaging_key).
 
+// Remove all RECORD facts from the IDB. These are redundant since we already compute sha256 hashes ourselves on all
+// files ourselves (and also on normalised versions of all text files).
+idb.remove_content(cat("R_IGNORE_RECORD", "[", id1, ",", id2, "]"), "RECORD", distinfo, key) :- edb.package(id1, "distinfo", distinfo), edb.content(id2, "RECORD", distinfo, key, _).
+
 // Finally, add the normalised versions of the raw EDB facts into the IDB
 idb.remove_content(cat("R_PROMOTE_METADATA_VERSION_RM", "[", id1, ",", id2, "]"), "METADATA", path, "metadata_version") :- metanorm.metadata_version(id1, path, version), metanorm.has_higher_metadata_version(id2, version).
 idb.content(cat("R_PROMOTE_METADATA_VERSION_MV", "[", id1, "]"), "METADATA", path, "metadata_version", final_version) :- metanorm.metadata_version(id1, path, final_version), !metanorm.has_higher_metadata_version(_, final_version).
