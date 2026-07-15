@@ -3,6 +3,7 @@
 """Tests for IDB → markdown summary projection."""
 
 import shutil
+from pathlib import Path
 
 import pytest
 from sample_data import COLORLOG_PYPI
@@ -15,6 +16,7 @@ from daleq4py.project_idb import (
     SUMMARY_REDUCED_FILENAME,
     _parse_decls,
     project_idb,
+    main,
 )
 
 requires_souffle = pytest.mark.skipif(
@@ -194,3 +196,39 @@ def test_project_idb_includes_specified_predicates_in_given_order_when_specified
 
     headings = [line for line in text.splitlines() if line.startswith("## ")]
     assert headings == ["## remove_content", "## package"]
+
+
+# Simple "integration tests" to check command line handling
+
+def _check_headings(idb_dir: Path, headings_expected: list[str]) -> None:
+    summary_path = idb_dir.parent / "normalisation-summary.md"
+    text = summary_path.read_text(encoding="utf-8")
+    headings_present = [line for line in text.splitlines() if line.startswith("## ")]
+    assert headings_present == headings_expected
+
+
+@requires_souffle
+def test_main_includes_content_then_package_predicates_by_default(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
+
+    main([str(idb_dir)])
+    _check_headings(idb_dir, ["## content", "## package"])
+
+
+@requires_souffle
+def test_main_includes_all_predicates_in_sorted_order_when_specified(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
+
+    main(["--include-all-predicates", str(idb_dir)])
+    _check_headings(idb_dir, ["## content", "## package", "## remove_content"])
+
+
+@requires_souffle
+def test_main_includes_specified_predicates_in_given_order_when_specified(edb_base_dir):
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    idb_dir = run_inference(content_path.parent)
+
+    main(["--include-only-predicates", "remove_content,package", str(idb_dir)])
+    _check_headings(idb_dir, ["## remove_content", "## package"])
