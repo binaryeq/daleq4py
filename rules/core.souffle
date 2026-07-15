@@ -38,6 +38,7 @@
 .input edb.package(IO=file, filename="<edb-package-facts>", delimiter="\t")
 .output idb.content(IO=file, filename="<idb-content-facts>", delimiter="\t")
 .output idb.package(IO=file, filename="<idb-package-facts>", delimiter="\t")
+.output idb.remove_content(IO=file, filename="<idb-remove-content-facts>", delimiter="\t")
 
 
 // lift every extensional fact into the intensional database.

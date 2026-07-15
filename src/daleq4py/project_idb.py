@@ -22,7 +22,7 @@ import re
 import sys
 from pathlib import Path
 
-from daleq4py.extract_edb import PROJECT_ROOT
+from daleq4py.extract_edb import PROJECT_ROOT, extract_edb
 
 logger = logging.getLogger("daleq4py")
 
@@ -101,7 +101,7 @@ def _render_section(
 
 
 def project_idb(
-    idb_dir: str | Path, remove_derivation: bool = False
+    idb_dir: str | Path, remove_derivation: bool = False, include_only_predicates: list[str] | None = ["content", "package"]
 ) -> Path:
     """Write the markdown summary for ``idb_dir`` and return its path.
 
@@ -113,13 +113,21 @@ def project_idb(
     With ``remove_derivation=True`` the output filename gains a ``-reduced``
     suffix and the leading ``id`` column (the rule provenance trace such as
     ``R_CONTENT[F1]``) is omitted from each table.
+
+    If ``include_only_predicates`` is ``None``, all predicates (*.tsv files) will
+    be included in sorted order; otherwise, only the listed ones will be included,
+    and in the order given. By default, "content" and "package" are included.
     """
     idb_dir = Path(idb_dir).resolve()
     if not idb_dir.is_dir():
         raise FileNotFoundError(f"idb directory does not exist: {idb_dir}")
-    tsv_files = sorted(idb_dir.glob("*.tsv"))
-    if not tsv_files:
-        raise FileNotFoundError(f"no .tsv files in: {idb_dir}")
+    if include_only_predicates is None:
+        tsv_files = sorted(idb_dir.glob("*.tsv"))
+        if not tsv_files:
+            raise FileNotFoundError(f"no .tsv files in: {idb_dir}")
+    else:
+        # If any are missing, reading from them will raise
+        tsv_files = [idb_dir / f"{stem}.tsv" for stem in include_only_predicates]
 
     decls = _parse_decls(RULES_DIR)
     summary_filename = (
@@ -170,6 +178,21 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--include-all-predicates",
+        action="store_true",
+        help=(
+            "include all predicates (.tsv files) in sorted order"
+        ),
+    )
+    parser.add_argument(
+        "--include-only-predicates",
+        type=str,
+        help=(
+            "include only the comma-separated list of predicates in the order given, "
+            "instead of the default of content,package"
+        ),
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -182,6 +205,12 @@ def main(argv: list[str] | None = None) -> int:
     """Entry point. Prints the summary path and returns an exit code."""
     parser = _build_parser()
     args = parser.parse_args(argv)
+    extra_kwargs = {}     # Default to using include_only_predicates="content,package"
+    if args.include_all_predicates:
+        extra_kwargs = {"include_only_predicates": None}
+    else:
+        if args.include_only_predicates:
+            extra_kwargs = {"include_only_predicates": args.include_only_predicates.split(",")}
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -190,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         summary_path = project_idb(
-            args.idb_dir, remove_derivation=args.remove_derivation
+            args.idb_dir, remove_derivation=args.remove_derivation, **extra_kwargs
         )
     except FileNotFoundError as exc:
         logger.error("%s", exc)

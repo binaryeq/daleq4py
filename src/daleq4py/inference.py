@@ -31,6 +31,7 @@ from pathlib import Path
 from daleq4py.extract_edb import (
     EDB_FILENAME,
     PACKAGE_EDB_FILENAME,
+    IDB_REMOVE_CONTENT_FILENAME,
     PROJECT_ROOT,
 )
 
@@ -46,6 +47,7 @@ _EDB_CONTENT_PLACEHOLDER = "<edb-content-facts>"
 _EDB_PACKAGE_PLACEHOLDER = "<edb-package-facts>"
 _IDB_CONTENT_PLACEHOLDER = "<idb-content-facts>"
 _IDB_PACKAGE_PLACEHOLDER = "<idb-package-facts>"
+_IDB_REMOVE_CONTENT_PLACEHOLDER = "<idb-remove-content-facts>"
 _TEXT_EXTENSIONS_PLACEHOLDER = "<text-extensions-facts>"
 
 # The list of text-file extensions consumed by src-normalisation.souffle. This
@@ -90,6 +92,7 @@ def run_inference(edb_dir: str | Path) -> Path:
 
     content_idb = idb_dir / EDB_FILENAME
     package_idb = idb_dir / PACKAGE_EDB_FILENAME
+    remove_content_idb = idb_dir / IDB_REMOVE_CONTENT_FILENAME
 
     # Substitute paths relative to ``session_dir`` (rather than absolute) so
     # the merged file stays portable within the session tree. Souffle is then
@@ -117,6 +120,7 @@ def run_inference(edb_dir: str | Path) -> Path:
         .replace(_EDB_PACKAGE_PLACEHOLDER, _rel(package_edb))
         .replace(_IDB_CONTENT_PLACEHOLDER, _rel(content_idb))
         .replace(_IDB_PACKAGE_PLACEHOLDER, _rel(package_idb))
+        .replace(_IDB_REMOVE_CONTENT_PLACEHOLDER, _rel(remove_content_idb))
         .replace(
             _TEXT_EXTENSIONS_PLACEHOLDER,
             TEXT_EXTENSIONS_FILE.resolve().as_posix(),

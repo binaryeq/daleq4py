@@ -85,6 +85,7 @@ logger = logging.getLogger("daleq4py")
 DIST_INFO_SUFFIX = ".dist-info"
 EDB_FILENAME = "content.tsv"
 PACKAGE_EDB_FILENAME = "package.tsv"
+IDB_REMOVE_CONTENT_FILENAME = "remove_content.tsv"
 RECORD_FILENAME = "RECORD"
 
 # Synthetic-key constants (also re-exported for tests / downstream callers).
