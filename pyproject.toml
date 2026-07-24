@@ -4,8 +4,13 @@ version = "0.1.0"
 description = "CLI tool to establish the equivalence of alternatively built python packages."
 authors = [{ name = "Jens Dietrich", email = "jens.dietrich@gmail.com" }]
 readme = "README.md"
+license = "UPL-1.0"
+license-files = ["LICENSE.md"]
 requires-python = ">=3.12"
 dependencies = ["packaging>=24", "lark>=1.1"]
+
+[project.urls]
+Repository = "https://github.com/binaryeq/daleq4py"
 
 [project.scripts]
 daleq4py = "daleq4py.cli:main"
