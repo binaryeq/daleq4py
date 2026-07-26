@@ -134,7 +134,10 @@ def run_inference(edb_dir: str | Path) -> Path:
 
     if shutil.which(SOUFFLE_EXECUTABLE) is None:
         raise InferenceError(
-            f"{SOUFFLE_EXECUTABLE!r} executable not found on PATH"
+            "Soufflé is required for inference but its 'souffle' executable "
+            "was not found on PATH. Install Soufflé "
+            "(https://souffle-lang.github.io/) and ensure 'souffle' is "
+            "available on PATH."
         )
 
     logger.info("running souffle on %s (cwd=%s)", MERGED_FILENAME, session_dir)
