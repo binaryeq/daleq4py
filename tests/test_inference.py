@@ -1,6 +1,12 @@
 # Author: Jens Dietrich (https://github.com/jensdietrich/), co-authored by claude code
 
-"""Tests for souffle inference on extracted EDBs."""
+"""Tests for Soufflé inference on extracted EDBs.
+
+Input-validation tests and the missing-executable diagnostic are independent
+of Soufflé and must pass in every environment. End-to-end tests exercise the
+generated Datalog rules with the real ``souffle`` executable; they are skipped
+when it is not installed, so contributors can run the Python-only test suite.
+"""
 
 import shutil
 
@@ -14,6 +20,8 @@ from daleq4py.inference import (
     run_inference,
 )
 
+# End-to-end tests need the separately installed system executable. Keep the
+# marker at module scope so their external prerequisite is explicit and uniform.
 requires_souffle = pytest.mark.skipif(
     shutil.which("souffle") is None,
     reason="souffle executable not on PATH",
@@ -25,7 +33,7 @@ def _read_rows(tsv_path):
     return [tuple(line.split("\t")) for line in text.splitlines()]
 
 
-# --- input validation (no souffle invocation needed) ---
+# --- Python-only input validation (no souffle invocation needed) ---
 
 
 def test_run_inference_rejects_missing_dir(tmp_path):
@@ -47,7 +55,22 @@ def test_run_inference_rejects_edb_dir_without_facts(tmp_path):
         run_inference(edb)
 
 
-# --- end-to-end (require souffle on PATH) ---
+def test_run_inference_explains_how_to_install_missing_souffle(
+    edb_base_dir, monkeypatch
+):
+    """Missing Soufflé must produce an actionable installation/PATH message."""
+    content_path = extract_edb(COLORLOG_PYPI, base_dir=edb_base_dir)
+    # Simulate a machine without Soufflé regardless of the developer's PATH.
+    monkeypatch.setattr("daleq4py.inference.shutil.which", lambda _: None)
+
+    with pytest.raises(
+        InferenceError,
+        match="Install Soufflé .* ensure 'souffle' is available on PATH",
+    ):
+        run_inference(content_path.parent)
+
+
+# --- End-to-end execution (requires Soufflé on PATH) ---
 
 
 @requires_souffle

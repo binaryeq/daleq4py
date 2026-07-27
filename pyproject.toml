@@ -1,16 +1,25 @@
 [project]
 name = "daleq4py"
 version = "0.1.0"
-description = "CLI tool to establish the equivalence of alternatively built python packages."
+description = "CLI for comparing alternatively built Python packages; Soufflé is required for inference-based commands."
 authors = [{ name = "Jens Dietrich", email = "jens.dietrich@gmail.com" }]
 readme = "README.md"
 license = "UPL-1.0"
 license-files = ["LICENSE.md"]
 requires-python = ">=3.12"
 dependencies = ["packaging>=24", "lark>=1.1"]
+keywords = ["python", "wheel", "reproducible-builds", "supply-chain-security"]
+classifiers = [
+    "Environment :: Console",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+]
 
 [project.urls]
+Homepage = "https://github.com/binaryeq/daleq4py"
 Repository = "https://github.com/binaryeq/daleq4py"
+Issues = "https://github.com/binaryeq/daleq4py/issues"
 
 [project.scripts]
 daleq4py = "daleq4py.cli:main"

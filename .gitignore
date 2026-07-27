@@ -1,0 +1,26 @@
+# Python bytecode and tooling caches
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments and local Python-version selectors
+.venv/
+venv/
+env/
+.python-version
+
+# Packaging and coverage output
+build/
+dist/
+*.egg-info/
+.coverage
+coverage.xml
+htmlcov/
+
+# Generated analysis and experiment output
+.souffle/
+.souffle-test/
+sample-data-results/

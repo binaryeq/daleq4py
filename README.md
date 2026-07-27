@@ -3,10 +3,19 @@
 A command line tool to establish the equivalence of two alternatively built
 Python wheels.
 
+> **External dependency:** Installing `daleq4py` from PyPI installs only the
+> Python package. The separately installed [Soufflé](https://souffle-lang.github.io/)
+> executable is required for inference-based commands; it is not bundled in
+> the `py3-none-any` wheel.
+
 ## Requirements
 
 - Python >= 3.12
 - [Poetry](https://python-poetry.org/) for dependency management and builds
+- [Soufflé](https://souffle-lang.github.io/) available on `PATH` for
+  inference-based commands: `inference`, `compare-wheels`, and
+  `run-experiments`. Soufflé is a separately installed system executable, not
+  a Python package dependency.
 
 ## Building
 
@@ -24,6 +33,10 @@ poetry build
 ```sh
 poetry run pytest
 ```
+
+## Continuous integration
+
+Every pull request runs the [test workflow](.github/workflows/test.yaml) on GitHub Actions. It creates a clean Python environment from `poetry.lock`, installs the package and its development dependencies, then runs the complete pytest suite. Tests that require the separately installed Soufflé executable skip when it is not available on the runner.
 
 ## Running
 
@@ -80,7 +93,8 @@ poetry run inference EDB_DIR
 | `EDB_DIR` | path to the `edb/` directory produced by `extract-edb` |
 | `-v`, `--verbose` | enable verbose (debug) logging |
 
-The `souffle` binary must be on `PATH`.
+Soufflé must be installed separately and its `souffle` binary must be on
+`PATH`.
 
 ### project-idb
 

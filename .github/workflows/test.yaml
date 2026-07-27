@@ -1,0 +1,37 @@
+name: Test
+
+# Run the test suite for every pull request before it is merged.
+on:
+  pull_request:
+
+# The workflow only needs to read source code.
+permissions:
+  contents: read
+
+jobs:
+  # Build an isolated, lockfile-pinned environment and execute the test suite.
+  test:
+    name: Test with Python 3.12
+    runs-on: ubuntu-latest
+    steps:
+      # Make the pull request's exact source revision available to subsequent steps.
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Use the minimum Python version supported by the published package.
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # Install Poetry independently of the project environment to manage dependencies.
+      - name: Install Poetry
+        run: pipx install poetry
+
+      # Recreate the environment from poetry.lock and remove undeclared packages.
+      - name: Install locked dependencies
+        run: poetry install --sync
+
+      # Run all tests; tests requiring an unavailable external Soufflé binary skip themselves.
+      - name: Run tests
+        run: poetry run pytest
