@@ -1,7 +1,7 @@
 # daleq4py
 
-A command line tool to establish the equivalence of two alternatively built
-Python wheels.
+A command line tool to establish the equivalence of two alternatively built Python wheels.
+The approach is described and evaluated in more details in [this paper](https://arxiv.org/abs/2607.21888).
 
 > **External dependency:** Installing `daleq4py` from PyPI installs only the
 > Python package. The separately installed [Soufflé](https://souffle-lang.github.io/)
