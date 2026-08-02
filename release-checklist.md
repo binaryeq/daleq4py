@@ -28,12 +28,13 @@ Publishing to PyPI is triggered by pushing a tag matching `v*.*.*`; see
    - `pyproject.toml` (`[project].version`)
    - `src/daleq4py/__init__.py` (`__version__`)
 
-   to the same value, e.g. `0.1.0`.
+   to the same value, e.g. `1.0.0`.
 2. Commit and push to `main`.
-3. Tag and push the tag:
+3. Tag and push the tag (must match the version bumped above, prefixed with
+   `v`):
    ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
 4. The workflow runs tests, builds, and publishes to PyPI automatically.
    Watch the Actions tab; the `publish` job will pause for approval if the
