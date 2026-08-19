@@ -1,6 +1,7 @@
 # daleq4py
 
 A command line tool to establish the equivalence of two alternatively built Python wheels.
+Similar to and inspired by the [daleq](https://github.com/binaryeq/daleq) tool for Java.
 The approach is described and evaluated in more details in [this paper](https://arxiv.org/abs/2607.21888).
 
 > **External dependency:** Installing `daleq4py` from PyPI installs only the
