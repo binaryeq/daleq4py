@@ -1,8 +1,9 @@
-"""Characterise the encoding-cookie false positive without fixing production code.
+"""Regression tests for the encoding-cookie false positive (issue 20).
 
-These tests deliberately assert the current vulnerable behaviour. After a fix,
-the equality assertions should be inverted. Only the locally generated fixture
-is executed; its payload assigns a string to VALUE.
+Python source must be interpreted using its declared encoding before
+normalisation. These tests fail while executable assignments can be discarded
+as comments. Only the locally generated fixture is executed; its payload
+assigns a string to VALUE.
 """
 
 from __future__ import annotations
@@ -21,9 +22,9 @@ from pathlib import Path
 
 import pytest
 
-from daleq4py.compare_wheels import compare_wheels
+from daleq4py.compare_wheels import _compare_py_members, compare_wheels
 from daleq4py.extract_edb import _normalise_for_hash
-from daleq4py.normalise_pysrc import normalise_source
+from daleq4py.normalise_pysrc import main as normalise_main
 
 
 @pytest.fixture(params=[False, True], ids=["cookie-first-line", "cookie-second-line"])
@@ -87,25 +88,34 @@ def _installed_value(wheel: Path, target: Path) -> str:
     return imported.stdout.strip()
 
 
-def test_utf8_normalisation_hides_executable_assignment(sources):
+def test_python_hash_normalisation_preserves_encoded_assignment(sources):
     safe, hidden = sources
     assert safe != hidden
     assert "# \nVALUE = 'evil'" in hidden.decode("utf-7")
-    assert normalise_source(safe.decode("utf-8")) == normalise_source(
-        hidden.decode("utf-8")
-    )
-    assert _normalise_for_hash("q3_fixture.py", safe) == _normalise_for_hash(
+    assert _normalise_for_hash("q3_fixture.py", safe) != _normalise_for_hash(
         "q3_fixture.py", hidden
     )
 
 
-def test_parsing_original_bytes_distinguishes_the_sources(sources):
-    """Validate the proposed approach using Python's own encoding-aware parser."""
+def test_python_member_comparison_detects_encoded_assignment(tmp_path, sources):
     safe, hidden = sources
-    assert ast.dump(ast.parse(safe)) != ast.dump(ast.parse(hidden))
-    assert ast.unparse(ast.parse(hidden)).splitlines() == [
-        "VALUE = 'safe'", "VALUE = 'evil'",
+    wheel_a = _make_wheel(tmp_path / "safe", safe)
+    wheel_b = _make_wheel(tmp_path / "hidden", hidden)
+
+    assert _compare_py_members(wheel_a, wheel_b, ["q3_fixture.py"]) == [
+        "q3_fixture.py",
     ]
+
+
+def test_normalise_cli_preserves_encoded_assignment(tmp_path, sources):
+    _, hidden = sources
+    source = tmp_path / "q3_fixture.py"
+    source.write_bytes(hidden)
+    output = tmp_path / "normalised"
+
+    assert normalise_main([str(source), "-o", str(output)]) == 0
+    normalised = (output / source.name).read_bytes()
+    assert ast.dump(ast.parse(normalised)) == ast.dump(ast.parse(hidden))
 
 
 @pytest.mark.skipif(
@@ -115,22 +125,23 @@ def test_parsing_original_bytes_distinguishes_the_sources(sources):
     importlib.util.find_spec("pip") is None,
     reason="pip needed for local fixture installation",
 )
-def test_wheels_compare_equal_but_installed_imports_differ(tmp_path, sources):
+def test_wheels_with_different_installed_behaviour_compare_unequal(tmp_path, sources):
     safe, hidden = sources
     wheel_a = _make_wheel(tmp_path / "safe", safe)
     wheel_b = _make_wheel(tmp_path / "hidden", hidden)
+
+    # Establish the actual runtime difference before checking the comparator.
+    assert _installed_value(wheel_a, tmp_path / "installed-safe") == "safe"
+    assert _installed_value(wheel_b, tmp_path / "installed-hidden") == "evil"
 
     # Exercise real extraction, Souffle inference and projection, without mocks.
     equal, info = compare_wheels(
         wheel_a, wheel_b, src=wheel_a, base_dir=tmp_path / "comparison",
     )
-    assert equal is True
-    for key in (
-        "metadata_equal", "py_files_equal", "text_files_equal", "other_files_equal",
-    ):
-        assert info[key] is True
-    assert info["py_files_mismatches"] == []
+    assert equal is False
+    assert info["metadata_equal"] is False
+    assert info["py_files_equal"] is False
+    assert info["text_files_equal"] is True
+    assert info["other_files_equal"] is True
+    assert info["py_files_mismatches"] == ["q3_fixture.py"]
     assert info["py_files_unexpected_in_b"] == []
-
-    assert _installed_value(wheel_a, tmp_path / "installed-safe") == "safe"
-    assert _installed_value(wheel_b, tmp_path / "installed-hidden") == "evil"
