@@ -11,7 +11,7 @@ The approach is described and evaluated in more details in [this paper](https://
 
 ## Requirements
 
-- Python >= 3.12
+- Python >= 3.14
 - [Poetry](https://python-poetry.org/) for dependency management and builds
 - [Soufflé](https://souffle-lang.github.io/) available on `PATH` for
   inference-based commands: `inference`, `compare-wheels`, and
@@ -167,6 +167,8 @@ This:
 - writes `\n` line endings unconditionally.
 
 Docstrings are kept (they are string-literal expressions, not comments).
+Python source is parsed from its original bytes, respecting PEP 263 encoding
+declarations and UTF-8 byte order marks. Normalised output is written as UTF-8.
 Files that fail to parse are reported and skipped; the exit status is
 non-zero if any file failed.
 
@@ -200,6 +202,9 @@ applying a different equality test to each:
 Members present in only one wheel count as a difference. The three per-group
 booleans are combined with `and` to produce the overall result. Exit code:
 `0` if the wheels are equal, `1` if they differ, `2` on error.
+
+Invalid Python source or source encoding causes extraction and comparison to
+fail with an error; it is never replaced with lossy text for normalised hashes.
 
 ```sh
 poetry run compare-wheels WHEEL_A WHEEL_B [--src ZIP]

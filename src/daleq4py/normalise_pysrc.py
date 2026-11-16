@@ -24,8 +24,13 @@ from pathlib import Path
 logger = logging.getLogger("daleq4py.normalise_pysrc")
 
 
-def normalise_source(source: str) -> str:
-    """Round-trip ``source`` through the AST and return canonical Python source."""
+def normalise_source(source: str | bytes) -> str:
+    """Round-trip source through the AST and return canonical Python source.
+
+    Pass original bytes when reading files so Python applies PEP 263 encoding
+    declarations and UTF-8 BOM handling before parsing. A string is treated as
+    already decoded source. Invalid source or encodings raise ``SyntaxError``.
+    """
     tree = ast.parse(source)
     out = ast.unparse(tree)
     if not out.endswith("\n"):
@@ -48,8 +53,8 @@ def _resolve_output_path(src_file: Path, input_root: Path, output_dir: Path) -> 
 
 def _process_one(src_file: Path, dest: Path) -> bool:
     try:
-        source = src_file.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+        source = src_file.read_bytes()
+    except OSError:
         logger.error("cannot read %s", src_file, exc_info=True)
         return False
     try:

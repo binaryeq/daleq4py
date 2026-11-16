@@ -43,11 +43,13 @@ collides with a genuine synthetic one.
 * **Synthetic keys** -- for every member, regardless of location or type:
 
   * ``@sha256`` -- SHA-256 of the raw (uncompressed) archive bytes.
-  * ``@norm/sha256`` -- SHA-256 after normalisation, emitted only for text
-    files (heuristic: no NUL byte in the first 8 KiB). For ``.py`` files the
-    normaliser is :func:`daleq4py.normalise_pysrc.normalise_source` (AST
-    round-trip; strips comments and canonicalises layout); for other text
-    files it is a pure LF normalisation of line endings.
+  * ``@norm/sha256`` -- SHA-256 after normalisation, emitted for Python
+    source and other text files (heuristic: no NUL byte in the first 8 KiB).
+    Python files are always parsed, and invalid source aborts extraction.
+    The Python normaliser is
+    :func:`daleq4py.normalise_pysrc.normalise_source` (AST round-trip; strips
+    comments and canonicalises layout); other text files use pure LF
+    normalisation of line endings.
   * ``@src-exists`` -- ``true``/``false``; whether a member with the same
     archive-relative path exists in the optional ``src`` baseline.
   * ``@src-exists-moved`` -- ``true``/``false``; whether a member with the
@@ -56,7 +58,7 @@ collides with a genuine synthetic one.
     the matched src file. Emitted only when at least one of the two
     ``@src-exists*`` keys is true. The match preference is path-equality
     first, then the alphabetically-first basename match. ``@src/norm/sha256``
-    follows the same text-only rule as ``@norm/sha256``.
+    follows the same Python-source/text rule as ``@norm/sha256``.
 
   The four ``@src-*`` keys are omitted entirely when ``src`` is not supplied.
 """
@@ -173,18 +175,18 @@ def _normalise_for_hash(file_name: str, data: bytes) -> bytes:
     """Return the byte form to feed into :func:`_sha256` for ``@norm/sha256``.
 
     For ``.py`` files: AST round-trip via ``normalise_source`` (drops
-    comments, canonicalises layout, output is already LF-terminated). If the
-    source won't parse, fall back to pure LF normalisation so we still emit
-    a stable hash.
+    comments, canonicalises layout, output is already LF-terminated). Original
+    bytes are parsed to honour Python encoding declarations. Invalid source
+    raises ``WheelValidationError``; no lossy fallback is used for Python.
     For other text files: pure LF normalisation.
     """
     if file_name.endswith(PY_SUFFIX):
         try:
-            return normalise_source(
-                data.decode("utf-8", errors="replace")
-            ).encode("utf-8")
-        except SyntaxError:
-            return _lf_normalise(data)
+            return normalise_source(data).encode("utf-8")
+        except SyntaxError as exc:
+            raise WheelValidationError(
+                f"cannot normalise Python source {file_name}: {exc}"
+            ) from exc
     return _lf_normalise(data)
 
 
@@ -195,7 +197,7 @@ def _normalise_requirement(value: str) -> str:
     around ``;`` and operators, marker quote style, legacy parenthesised
     versions, specifier ordering -- and canonicalises the distribution name
     (PEP 503). A value that cannot be parsed as a requirement is returned
-    unchanged, mirroring the lenient fallback used for source normalisation.
+    unchanged.
     """
     try:
         req = Requirement(value)
@@ -349,12 +351,13 @@ def _synthetic_rows(
     # @sha256 -- always.
     rows.append((file_name, dir_path, KEY_SHA256, _sha256(data)))
 
-    # @norm/sha256 -- only when the bytes look like text.
-    if text_like:
+    # Always parse Python, including invalid sources containing NUL bytes.
+    # The text heuristic applies only to other files.
+    if file_name.endswith(PY_SUFFIX) or text_like:
         rows.append((
             file_name, dir_path,
             KEY_NORM_SHA256,
-            _sha256(_normalise_for_hash(file_name, data)),
+            _sha256(_normalise_for_hash(full_path, data)),
         ))
 
     # @src-* -- only when a src baseline is supplied.
@@ -389,11 +392,11 @@ def _synthetic_rows(
                 KEY_SRC_SHA256,
                 _sha256(matched_bytes),
             ))
-            if _is_text(matched_bytes):
+            if file_name.endswith(PY_SUFFIX) or _is_text(matched_bytes):
                 rows.append((
                     file_name, dir_path,
                     KEY_SRC_NORM_SHA256,
-                    _sha256(_normalise_for_hash(file_name, matched_bytes)),
+                    _sha256(_normalise_for_hash(full_path, matched_bytes)),
                 ))
 
     return rows
