@@ -22,9 +22,14 @@ from pathlib import Path
 
 import pytest
 
-from daleq4py.compare_wheels import _compare_py_members, compare_wheels
-from daleq4py.extract_edb import _normalise_for_hash
-from daleq4py.normalise_pysrc import main as normalise_main
+from daleq4py.compare_wheels import (
+    _compare_py_members,
+    compare_wheels,
+    main as compare_main,
+)
+from daleq4py.extract_edb import _normalise_for_hash, extract_edb
+from daleq4py.normalise_pysrc import main as normalise_main, normalise_source
+from daleq4py.wheel import WheelValidationError
 
 
 @pytest.fixture(params=[False, True], ids=["cookie-first-line", "cookie-second-line"])
@@ -116,6 +121,83 @@ def test_normalise_cli_preserves_encoded_assignment(tmp_path, sources):
     assert normalise_main([str(source), "-o", str(output)]) == 0
     normalised = (output / source.name).read_bytes()
     assert ast.dump(ast.parse(normalised)) == ast.dump(ast.parse(hidden))
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        b"VALUE = 'caf\xc3\xa9'\n",
+        b"\xef\xbb\xbfVALUE = 'caf\xc3\xa9'\n",
+        b"# coding: latin-1\nVALUE = 'caf\xe9'\n",
+        b"#!/usr/bin/env python\n# coding: latin-1\nVALUE = 'caf\xe9'\n",
+    ],
+    ids=["utf8-default", "utf8-bom", "latin1-first-line", "latin1-second-line"],
+)
+def test_equivalent_source_encodings_compare_equal(tmp_path, source):
+    utf8 = "VALUE = 'café'\n".encode("utf-8")
+    assert normalise_source(source) == normalise_source(utf8)
+    assert _normalise_for_hash("q3_fixture.py", source) == _normalise_for_hash(
+        "q3_fixture.py", utf8
+    )
+    wheel_a = _make_wheel(tmp_path / "encoded", source)
+    wheel_b = _make_wheel(tmp_path / "utf8", utf8)
+    assert _compare_py_members(wheel_a, wheel_b, ["q3_fixture.py"]) == []
+
+
+@pytest.fixture(
+    params=[
+        b"# coding: unknown-source-encoding\nVALUE = 'safe'\n",
+        b"# invalid UTF-8: \xff\nVALUE = 'safe'\n",
+        b"\xef\xbb\xbf# coding: latin-1\nVALUE = 'safe'\n",
+        b"# coding: utf-7\n# +A-\nVALUE = 'safe'\n",
+        b"VALUE = 'safe'\x00\n",
+        b"def broken(:\n",
+    ],
+    ids=["unknown-codec", "invalid-utf8", "bom-conflict", "invalid-utf7", "nul", "syntax"],
+)
+def invalid_source(request):
+    return request.param
+
+
+def test_invalid_python_source_is_not_normalised(invalid_source):
+    with pytest.raises(SyntaxError):
+        normalise_source(invalid_source)
+    with pytest.raises(WheelValidationError, match="q3_fixture.py"):
+        _normalise_for_hash("q3_fixture.py", invalid_source)
+
+
+def test_normalise_cli_leaves_invalid_source_unchanged(tmp_path, invalid_source):
+    source = tmp_path / "q3_fixture.py"
+    source.write_bytes(invalid_source)
+    assert normalise_main([str(source), "--in-place"]) == 1
+    assert source.read_bytes() == invalid_source
+
+
+@pytest.mark.parametrize("invalid_baseline", [False, True], ids=["wheel", "baseline"])
+def test_extraction_rejects_invalid_python_source(
+    tmp_path, invalid_source, invalid_baseline,
+):
+    invalid_wheel = _make_wheel(tmp_path / "invalid", invalid_source)
+    if invalid_baseline:
+        wheel = _make_wheel(tmp_path / "safe", b"VALUE = 'safe'\n")
+        src = invalid_wheel
+    else:
+        wheel = invalid_wheel
+        src = None
+
+    with pytest.raises(WheelValidationError, match="q3_fixture.py"):
+        extract_edb(wheel, base_dir=tmp_path / "extraction", src=src)
+
+
+def test_compare_cli_reports_invalid_source_as_error(tmp_path, capsys):
+    invalid_wheel = _make_wheel(
+        tmp_path / "invalid", b"# coding: unknown-source-encoding\n",
+    )
+    safe_wheel = _make_wheel(tmp_path / "safe", b"VALUE = 'safe'\n")
+    assert compare_main([
+        str(invalid_wheel), str(safe_wheel), "--base-dir", str(tmp_path / "comparison"),
+    ]) == 2
+    assert "EQUAL" not in capsys.readouterr().out
 
 
 @pytest.mark.skipif(

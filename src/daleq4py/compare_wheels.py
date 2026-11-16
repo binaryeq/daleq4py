@@ -165,12 +165,8 @@ def _compare_py_members(
     with zipfile.ZipFile(wheel_a) as za, zipfile.ZipFile(wheel_b) as zb:
         for name in names:
             try:
-                norm_a = normalise_source(
-                    za.read(name).decode("utf-8", errors="replace")
-                )
-                norm_b = normalise_source(
-                    zb.read(name).decode("utf-8", errors="replace")
-                )
+                norm_a = normalise_source(za.read(name))
+                norm_b = normalise_source(zb.read(name))
             except SyntaxError:
                 logger.error("syntax error normalising %s", name, exc_info=True)
                 mismatches.append(name)
