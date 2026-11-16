@@ -7,7 +7,7 @@ module writes ``<session>/normalisation-summary.md`` with one section per
 IDB predicate (one section per ``*.tsv`` file). The section header is the
 predicate name -- the TSV filename stem -- and the body is a markdown table
 whose column headers are inferred from the matching ``.decl`` declaration in
-any ``rules/*.souffle`` file.
+any bundled ``daleq4py/rules/*.souffle`` file.
 
 When ``remove_derivation=True`` the output filename gains a ``-reduced``
 suffix and the leading ``id`` column (the rule provenance trace) is stripped
@@ -20,13 +20,13 @@ import argparse
 import logging
 import re
 import sys
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
-from daleq4py.extract_edb import PROJECT_ROOT, extract_edb
+from daleq4py.rule_resources import RULES_DIR, list_rule_files
 
 logger = logging.getLogger("daleq4py")
 
-RULES_DIR = PROJECT_ROOT / "rules"
 SUMMARY_FILENAME = "normalisation-summary.md"
 SUMMARY_REDUCED_FILENAME = "normalisation-summary-reduced.md"
 ID_COLUMN = "id"
@@ -36,7 +36,7 @@ ID_COLUMN = "id"
 _DECL_RE = re.compile(r"\.decl\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)")
 
 
-def _parse_decls(rules_dir: Path) -> dict[str, list[str]]:
+def _parse_decls(rules_dir: Traversable) -> dict[str, list[str]]:
     """Return ``{predicate_name: [column_name, ...]}`` from every rules file.
 
     A predicate declared in multiple files is taken from whichever file the
@@ -44,7 +44,7 @@ def _parse_decls(rules_dir: Path) -> dict[str, list[str]]:
     must share a shape anyway, otherwise Soufflé wouldn't compile.
     """
     decls: dict[str, list[str]] = {}
-    for rule_file in sorted(rules_dir.glob("*.souffle")):
+    for rule_file in list_rule_files(rules_dir):
         text = rule_file.read_text(encoding="utf-8")
         for match in _DECL_RE.finditer(text):
             name = match.group(1)
@@ -158,7 +158,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="project-idb",
         description=(
             "Render a markdown summary of all IDB TSV files in a folder, "
-            "using column names from the rules/*.souffle declarations."
+            "using column names from the bundled rules/*.souffle declarations."
         ),
     )
     parser.add_argument(

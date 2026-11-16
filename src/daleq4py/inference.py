@@ -5,9 +5,9 @@
 Given the ``<session>/edb/`` directory produced by :mod:`daleq4py.extract_edb`, this
 module:
 
-1. concatenates every ``rules/*.souffle`` file (in sorted order) into
+1. concatenates every bundled ``daleq4py/rules/*.souffle`` file (in sorted order) into
    ``<session>/mergedEDBAndRules.souffle``, prefixing each file's content with
-   a ``// from <path-relative-to-project-root>`` provenance comment;
+   a ``// from rules/<filename>`` provenance comment;
 2. replaces the ``<*-facts>`` placeholders in that merged file with paths to
    the EDB (input) and IDB (output) fact files, and to the shared
    ``text_extensions.txt`` consumed by the text-normalisation rule;
@@ -32,12 +32,11 @@ from daleq4py.extract_edb import (
     EDB_FILENAME,
     PACKAGE_EDB_FILENAME,
     IDB_REMOVE_CONTENT_FILENAME,
-    PROJECT_ROOT,
 )
+from daleq4py.rule_resources import RULES_DIR, list_rule_files
 
 logger = logging.getLogger("daleq4py")
 
-RULES_DIR = PROJECT_ROOT / "rules"
 MERGED_FILENAME = "mergedEDBAndRules.souffle"
 SOUFFLE_EXECUTABLE = "souffle"
 
@@ -82,7 +81,7 @@ def run_inference(edb_dir: str | Path) -> Path:
         if not required.exists():
             raise InferenceError(f"missing fact file: {required}")
 
-    rule_files = sorted(RULES_DIR.glob("*.souffle"))
+    rule_files = list_rule_files(RULES_DIR)
     if not rule_files:
         raise InferenceError(f"no .souffle files in: {RULES_DIR}")
 
@@ -104,7 +103,7 @@ def run_inference(edb_dir: str | Path) -> Path:
     # comment so the merged file points back to the source of each rule.
     merged_chunks: list[str] = []
     for rule_file in rule_files:
-        provenance = rule_file.relative_to(PROJECT_ROOT).as_posix()
+        provenance = f"rules/{rule_file.name}"
         body = rule_file.read_text(encoding="utf-8")
         if not body.endswith("\n"):
             body += "\n"
