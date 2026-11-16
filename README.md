@@ -79,7 +79,7 @@ same directory.
 ### inference
 
 Runs Soufflé on the EDB produced by `extract-edb`. The script concatenates
-every `rules/*.souffle` file (each block prefixed with a `// from <path>`
+every bundled `daleq4py/rules/*.souffle` file (each block prefixed with a `// from <path>`
 provenance comment) into `<session>/mergedEDBAndRules.souffle`, substitutes
 the four `<*-facts>` placeholders with absolute paths to the EDB (input) and
 IDB (output) TSVs, creates the sibling `<session>/idb/` directory, then
@@ -97,13 +97,17 @@ poetry run inference EDB_DIR
 Soufflé must be installed separately and its `souffle` binary must be on
 `PATH`.
 
+The rule files are included in both the wheel and source distribution; no
+manual copying is needed after installation. Their source location is
+`src/daleq4py/rules/`.
+
 ### project-idb
 
 Renders a human-readable markdown summary of an IDB directory. For every
 `*.tsv` file in the input folder it emits a section whose header is the
 predicate name (the filename stem) and whose body is a markdown table; the
 column headers are inferred from the matching `.decl` declaration in any
-`rules/*.souffle` file. The summary is written to
+bundled `daleq4py/rules/*.souffle` file. The summary is written to
 `<session>/normalisation-summary.md`.
 
 ```sh

@@ -53,6 +53,10 @@ Run these locally to catch problems before pushing a tag:
   ```
   You should see `daleq4py-<version>.dist-info/licenses/LICENSE.md`.
 - `poetry run pytest` — confirms tests pass.
+  Packaging tests also build both distributions, check for the bundled
+  `daleq4py/rules/*.souffle` files, and install the wheel outside the repository
+  to exercise rule loading. With Soufflé available, they run a wheel comparison
+  using the installed package as well.
 
 Note: end-to-end verification of the publish step itself only happens on the
 first real tag push — there's no local way to dry-run the trusted-publishing

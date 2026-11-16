@@ -2,4 +2,4 @@
 
 """daleq4py — a CLI tool composed of interacting modules."""
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
