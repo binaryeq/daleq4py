@@ -11,7 +11,7 @@ The approach is described and evaluated in more details in [this paper](https://
 
 ## Requirements
 
-- Python >= 3.12
+- Python >= 3.14
 - [Poetry](https://python-poetry.org/) for dependency management and builds
 - [Soufflé](https://souffle-lang.github.io/) available on `PATH` for
   inference-based commands: `inference`, `compare-wheels`, and
